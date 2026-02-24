@@ -85,12 +85,6 @@ export default function Home() {
               Learn More
             </Button>
           </div>
-          <div className="mt-12 flex h-72 w-full max-w-5xl items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-center text-primary/80 sm:h-80">
-            <div className="flex flex-col items-center gap-4">
-              <QrCode className="size-16" />
-              <p className="text-sm sm:text-base">QR Code Scanner Interface</p>
-            </div>
-          </div>
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
