@@ -14,7 +14,10 @@ import { Input } from "@/components/ui/input"
 import Link from "next/link"
 import Image from "next/image"
 import { signIn } from "next-auth/react"
-import { resolveAgeGroupFromBirthday } from "@/lib/age-group"
+import {
+  getAgeGroupDisplayName,
+  resolveAgeGroupFromBirthday,
+} from "@/lib/age-group"
 import { useRouter } from "next/navigation"
 import { type FormEvent, useState } from "react"
 
@@ -111,7 +114,7 @@ export function SignupForm({
     try {
       const resolved = resolveAgeGroupFromBirthday(birthday)
       agePreview = String(resolved.age)
-      ageGroupPreview = resolved.ageGroup
+      ageGroupPreview = getAgeGroupDisplayName(resolved.ageGroup)
     } catch {
       agePreview = ""
       ageGroupPreview = ""

@@ -276,7 +276,8 @@ values
   ('AY', 'Age Group AY'),
   ('AP', 'Age Group AP'),
   ('AYA', 'Age Group AYA'),
-  ('AMW', 'Age Group AMW')
+  ('AMW', 'Age Group AMW'),
+  ('AS', 'Age Group AS')
 on conflict (code) do nothing;
 ```
 

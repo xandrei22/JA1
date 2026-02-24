@@ -2,11 +2,23 @@ export const AGE_GROUP_LEVELS = {
   AK: "AK",
   AY: "AY",
   AP: "AP",
-  AYA: "AYA",
   AMW: "AMW",
+  AS: "AS",
 } as const
 
 export type AgeGroupLevel = (typeof AGE_GROUP_LEVELS)[keyof typeof AGE_GROUP_LEVELS]
+
+const AGE_GROUP_LABELS: Record<AgeGroupLevel, string> = {
+  [AGE_GROUP_LEVELS.AK]: "Anointed Kids (AK)",
+  [AGE_GROUP_LEVELS.AY]: "Anointed Youth (AY)",
+  [AGE_GROUP_LEVELS.AP]: "Anointed Professionals (AP)",
+  [AGE_GROUP_LEVELS.AMW]: "Anointed Men and Women (AMW)",
+  [AGE_GROUP_LEVELS.AS]: "Anointed Seniors (AS)",
+}
+
+export function getAgeGroupDisplayName(ageGroup: AgeGroupLevel): string {
+  return AGE_GROUP_LABELS[ageGroup]
+}
 
 export function calculateAgeFromBirthday(dateOfBirth: Date): number {
   const today = new Date()
@@ -26,10 +38,10 @@ export function calculateAgeFromBirthday(dateOfBirth: Date): number {
 
 export function resolveAgeGroupFromAge(age: number): AgeGroupLevel {
   if (age <= 12) return AGE_GROUP_LEVELS.AK
-  if (age <= 17) return AGE_GROUP_LEVELS.AY
-  if (age <= 35) return AGE_GROUP_LEVELS.AP
-  if (age <= 59) return AGE_GROUP_LEVELS.AYA
-  return AGE_GROUP_LEVELS.AMW
+  if (age <= 22) return AGE_GROUP_LEVELS.AY
+  if (age <= 40) return AGE_GROUP_LEVELS.AP
+  if (age <= 59) return AGE_GROUP_LEVELS.AMW
+  return AGE_GROUP_LEVELS.AS
 }
 
 export function resolveAgeGroupFromBirthday(
