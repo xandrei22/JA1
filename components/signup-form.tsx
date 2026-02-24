@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import Link from "next/link"
 import Image from "next/image"
 import { signIn } from "next-auth/react"
+import { resolveAgeGroupFromBirthday } from "@/lib/age-group"
 import { useRouter } from "next/navigation"
 import { type FormEvent, useState } from "react"
 
@@ -24,6 +25,7 @@ export function SignupForm({
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [birthday, setBirthday] = useState("")
 
   async function handleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -31,13 +33,32 @@ export function SignupForm({
     setError(null)
 
     const formData = new FormData(event.currentTarget)
+    const firstName = String(formData.get("first-name") ?? "").trim()
+    const lastName = String(formData.get("last-name") ?? "").trim()
+    const birthdayValue = String(formData.get("birthday") ?? "")
+    const address = String(formData.get("address") ?? "").trim()
     const email = String(formData.get("email") ?? "")
     const password = String(formData.get("password") ?? "")
     const confirmPassword = String(formData.get("confirm-password") ?? "")
 
+    if (!firstName || !lastName || !birthdayValue || !address) {
+      setIsSubmitting(false)
+      setError("Please complete all required fields.")
+      return
+    }
+
     if (password !== confirmPassword) {
       setIsSubmitting(false)
       setError("Passwords do not match.")
+      return
+    }
+
+    let resolvedAge = 0
+    try {
+      resolvedAge = resolveAgeGroupFromBirthday(birthdayValue).age
+    } catch {
+      setIsSubmitting(false)
+      setError("Please provide a valid birthday.")
       return
     }
 
@@ -46,7 +67,15 @@ export function SignupForm({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        birthday: birthdayValue,
+        age: resolvedAge,
+        address,
+        email,
+        password,
+      }),
     })
 
     if (!response.ok) {
@@ -75,23 +104,82 @@ export function SignupForm({
     router.refresh()
   }
 
+  let agePreview = ""
+  let ageGroupPreview = ""
+
+  if (birthday) {
+    try {
+      const resolved = resolveAgeGroupFromBirthday(birthday)
+      agePreview = String(resolved.age)
+      ageGroupPreview = resolved.ageGroup
+    } catch {
+      agePreview = ""
+      ageGroupPreview = ""
+    }
+  }
+
   async function handleGoogleSignup() {
     setIsSubmitting(true)
     await signIn("google", { callbackUrl: "/dashboard" })
   }
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
+    <div className={cn("flex flex-col gap-4", className)} {...props}>
       <Card className="overflow-hidden p-0">
         <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="p-6 md:p-8" onSubmit={handleSignup}>
-            <FieldGroup>
+          <form className="p-5 md:p-6" onSubmit={handleSignup}>
+            <FieldGroup className="gap-4 [&>[data-slot=field-group]]:gap-3">
               <div className="flex flex-col items-center gap-2 text-center">
                 <h1 className="text-2xl font-bold">Create your account</h1>
                 <p className="text-muted-foreground text-sm text-balance">
                   Enter your details below to create your JA1 account
                 </p>
               </div>
+              <Field>
+                <Field className="grid grid-cols-2 gap-3">
+                  <Field>
+                    <FieldLabel htmlFor="first-name">First Name</FieldLabel>
+                    <Input id="first-name" name="first-name" type="text" required />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="last-name">Last Name</FieldLabel>
+                    <Input id="last-name" name="last-name" type="text" required />
+                  </Field>
+                </Field>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="birthday">Birthday</FieldLabel>
+                <Input
+                  id="birthday"
+                  name="birthday"
+                  type="date"
+                  value={birthday}
+                  onChange={(event) => setBirthday(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <Field className="grid grid-cols-2 gap-3">
+                  <Field>
+                    <FieldLabel htmlFor="age">Age</FieldLabel>
+                    <Input id="age" name="age" type="text" value={agePreview} readOnly />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="age-group">Age Group Level</FieldLabel>
+                    <Input
+                      id="age-group"
+                      name="age-group"
+                      type="text"
+                      value={ageGroupPreview}
+                      readOnly
+                    />
+                  </Field>
+                </Field>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="address">Address</FieldLabel>
+                <Input id="address" name="address" type="text" required />
+              </Field>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
@@ -101,13 +189,10 @@ export function SignupForm({
                   placeholder="m@example.com"
                   required
                 />
-                <FieldDescription>
-                  We&apos;ll use this to contact you. We will not share your
-                  email with anyone else.
-                </FieldDescription>
+
               </Field>
               <Field>
-                <Field className="grid grid-cols-2 gap-4">
+                <Field className="grid grid-cols-2 gap-3">
                   <Field>
                     <FieldLabel htmlFor="password">Password</FieldLabel>
                     <Input id="password" name="password" type="password" required />

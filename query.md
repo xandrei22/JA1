@@ -42,12 +42,23 @@ create table if not exists public.central_users (
   email text not null unique,
   password_hash text not null,
   full_name text,
+  first_name text,
+  last_name text,
+  birthday date,
+  age integer,
+  address text,
   branch_code text,
   age_group text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.central_users add column if not exists first_name text;
+alter table public.central_users add column if not exists last_name text;
+alter table public.central_users add column if not exists birthday date;
+alter table public.central_users add column if not exists age integer;
+alter table public.central_users add column if not exists address text;
 
 create table if not exists public.members (
   id uuid primary key default gen_random_uuid(),
