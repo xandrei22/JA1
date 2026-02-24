@@ -121,5 +121,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-poppins), sans-serif;
+  }
+  .font-brand {
+    font-family: var(--font-geist-sans), sans-serif;
   }
 }

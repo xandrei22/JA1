@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import Link from "next/link";
 import {
   QrCode,
   BarChart3,
@@ -54,13 +55,20 @@ export default function Home() {
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 font-semibold">
             <Image src="/JA1mlogo.svg" alt="JA1 logo" width={30} height={30} className="rounded-full" />
-            <span className="text-primary">Jesus the Anointed One</span>
+            <span
+              className="text-primary"
+              style={{ fontFamily: "var(--font-geist-sans), sans-serif" }}
+            >
+              Jesus the Anointed One
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              Sign In
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/login">Sign In</Link>
             </Button>
-            <Button size="sm">Get Started</Button>
+            <Button size="sm" asChild>
+              <Link href="/signup">Get Started</Link>
+            </Button>
           </div>
         </div>
       </header>
@@ -80,14 +88,16 @@ export default function Home() {
             organizations.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button size="lg">Start for Free</Button>
-            <Button size="lg" variant="outline">
-              Learn More
+            <Button size="lg" asChild>
+              <Link href="/signup">Start for Free</Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="#features">Learn More</Link>
             </Button>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
+        <section id="features" className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Powerful Features
@@ -119,8 +129,8 @@ export default function Home() {
               Join churches using JA1 to streamline attendance and ministry
               management. Select your church after sign in to continue.
             </p>
-            <Button size="lg" className="mt-8">
-              Get Started Now
+            <Button size="lg" className="mt-8" asChild>
+              <Link href="/signup">Get Started Now</Link>
             </Button>
           </div>
         </section>
@@ -130,7 +140,12 @@ export default function Home() {
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:px-6 lg:px-8">
           <div className="flex items-center gap-2 font-semibold text-foreground">
             <Image src="/JA1mlogo.svg" alt="JA1 logo" width={30} height={30} className="rounded-full" />
-            <span className="text-primary">Jesus the Anointed One</span>
+            <span
+              className="text-primary"
+              style={{ fontFamily: "var(--font-geist-sans), sans-serif" }}
+            >
+              Jesus the Anointed One
+            </span>
           </div>
           <p>© 2026 JA1. All rights reserved.</p>
         </div>
