@@ -11,25 +11,23 @@ import { SiteHeader } from "@/components/site-header"
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Calendar,
   Church,
   CircleHelp,
   Compass,
-  Landmark,
-  UserRound,
   QrCode,
 } from "lucide-react";
 
 export default function Home() {
   const gallerySlides = [
-    { src: "/JA1mlogonbg.png", alt: "JA1 ministry highlight 1" },
-    { src: "/JA1mlogo.svg", alt: "JA1 logo" },
-    { src: "/JA1mlogonbg.png", alt: "JA1 ministry highlight 2" },
+    { src: "/ja1carousel.jpg", alt: "JA1 ministry highlight 1" },
+    { src: "/ja1carousel.jpg", alt: "JA1 logo" },
+    { src: "/ja1carousel.jpg", alt: "JA1 ministry highlight 2" },
   ]
 
   const founderSlides = [
-    { src: "/JA1mlogo.svg", alt: "Founder photo placeholder 1" },
-    { src: "/JA1mlogonbg.png", alt: "Founder photo placeholder 2" },
+    { src: "/carousel2.jpg", alt: "Founder ministry photo 1" },
+    { src: "/carousel3.jpg", alt: "Founder ministry photo 2" },
+    { src: "/carousel4.jpg", alt: "Founder ministry photo 3" },
   ]
 
   const highlights = [
@@ -54,72 +52,65 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-muted/20 text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
 
       <main>
-        <section className="mx-auto flex w-full max-w-6xl flex-col items-center px-4 pb-16 pt-16 text-center sm:px-6 lg:px-8 lg:pt-24">
-          <Image src="/JA1mlogo.svg" alt="JA1 logo" width={84} height={84} className="rounded-full" />
-          <h1 className="mt-8 text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+        <section className="mx-auto flex min-h-[calc(100vh-3.5rem)] w-full max-w-6xl flex-col items-center justify-center px-4 py-12 text-center sm:px-6 lg:px-8">
+          <Image src="/JA1mlogo.svg" alt="JA1 logo" width={110} height={110} className="rounded-full" />
+          <h1 className="mt-8 text-5xl font-bold leading-tight tracking-tight sm:text-6xl lg:text-7xl">
             Jesus the Anointed One + <span className="text-primary">Smart Ministry System</span>
           </h1>
-          <p className="mt-6 max-w-3xl text-lg text-muted-foreground">
+          <p className="mt-7 max-w-4xl text-xl text-muted-foreground sm:text-2xl">
             JA1&apos;s platform is designed to serve both church identity and ministry operations: preserving attendance accuracy, improving coordination, and supporting organized pastoral care.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button size="lg" asChild>
+            <Button size="lg" className="h-14 px-8 text-lg" asChild>
               <Link href="/signup">Join the System</Link>
             </Button>
-            <Button size="lg" variant="outline" asChild>
+            <Button size="lg" variant="outline" className="h-14 px-8 text-lg" asChild>
               <Link href="#gallery-section">Explore JA1 Sections</Link>
             </Button>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              JA1 + System Overview
-            </h2>
-            <p className="mt-3 text-lg text-muted-foreground">
-              The homepage now focuses on both ministry identity and the platform purpose.
-            </p>
-          </div>
+        <section className="w-full bg-zinc-200 py-14">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                JA1 + System Overview
+              </h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                The homepage now focuses on both ministry identity and the platform purpose.
+              </p>
+            </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {highlights.map(({ title, description, icon: Icon }) => (
-              <div key={title} className="rounded-xl border bg-card p-6">
-                <div className="mb-4 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-                  <Icon className="size-5" />
+            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {highlights.map(({ title, description, icon: Icon }) => (
+                <div key={title} className="rounded-xl border border-primary/40 bg-card p-6 text-center shadow-lg">
+                  <div className="mx-auto mb-4 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="text-2xl font-semibold leading-tight">{title}</h3>
+                  <p className="mt-3 text-lg text-muted-foreground">{description}</p>
                 </div>
-                <h3 className="text-2xl font-semibold leading-tight">{title}</h3>
-                <p className="mt-3 text-lg text-muted-foreground">{description}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
-        <section id="gallery-section" className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div>
-            <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-              <Calendar className="size-5" />
-            </div>
-            <h2 className="text-3xl font-bold tracking-tight">JA1 Gallery</h2>
-            <p className="mt-3 text-lg text-muted-foreground">
-              Carousel and image highlights for JA1 services, events, and ministry moments.
-            </p>
-
-            <div className="mt-6">
-              <Carousel className="w-full">
-                <CarouselContent>
+        <section id="gallery-section" className="w-full py-0">
+            <div className="w-full">
+              <Carousel className="h-full w-full">
+                <CarouselContent className="h-screen !-ml-0">
                   {gallerySlides.map((slide) => (
-                    <CarouselItem key={slide.alt}>
-                      <div className="bg-muted relative aspect-[21/8] w-full overflow-hidden rounded-xl border">
+                    <CarouselItem key={slide.alt} className="h-full !pl-0">
+                      <div className="relative h-full w-full overflow-hidden">
                         <Image
                           src={slide.src}
                           alt={slide.alt}
                           fill
-                          className="object-contain p-6"
+                          className="object-cover object-center"
                         />
                       </div>
                     </CarouselItem>
@@ -129,38 +120,25 @@ export default function Home() {
                 <CarouselNext className="right-3" />
               </Carousel>
 
-              <div className="mt-6 w-full max-w-3xl">
-                <div className="mb-2 inline-flex rounded-lg bg-primary/10 p-2 text-primary">
-                  <Landmark className="size-5" />
-                </div>
-                <h3 className="text-2xl font-bold tracking-tight">JA1 Founding Details</h3>
-                <p className="mt-2 text-muted-foreground">
-                  Official ministry history, founding timeline, and growth milestones of JA1 are presented here as an overlapping section.
-                </p>
-              </div>
             </div>
-          </div>
         </section>
 
-        <section id="founder-section" className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="grid gap-6 md:grid-cols-[1fr_280px] md:items-start">
-            <div>
-              <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-                <UserRound className="size-5" />
-              </div>
+        <section id="founder-section" className="w-full bg-muted/40 py-10">
+          <div className="mx-auto grid min-h-[50vh] w-full max-w-6xl gap-6 px-4 md:grid-cols-2 md:items-stretch sm:px-6 lg:px-8">
+            <div className="flex flex-col justify-center">
               <h2 className="text-3xl font-bold tracking-tight">Who Is the Founder</h2>
               <p className="mt-3 text-lg text-muted-foreground">
                 Learn about the founder&apos;s story, vision, and mission for the congregation, all in this homepage section.
               </p>
             </div>
 
-            <div>
-              <Carousel className="w-full">
-                <CarouselContent>
+            <div className="h-full">
+              <Carousel className="h-full w-full">
+                <CarouselContent className="h-[50vh]">
                   {founderSlides.map((slide) => (
-                    <CarouselItem key={slide.alt}>
-                      <div className="bg-muted relative aspect-square overflow-hidden rounded-xl border">
-                        <Image src={slide.src} alt={slide.alt} fill className="object-contain p-4" />
+                    <CarouselItem key={slide.alt} className="h-full">
+                      <div className="bg-muted relative h-full w-full overflow-hidden rounded-xl border">
+                        <Image src={slide.src} alt={slide.alt} fill className="object-cover" />
                       </div>
                     </CarouselItem>
                   ))}
@@ -172,25 +150,30 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="find-section" className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="rounded-xl border bg-card p-6">
-            <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-              <Compass className="size-5" />
+        <section id="find-section" className="w-full bg-primary/10 py-8">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="rounded-xl border border-primary/40 bg-background p-6 text-center">
+              <div className="mb-3 flex justify-center">
+                <div className="inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
+                  <Compass className="size-5" />
+                </div>
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight">Find JA1</h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                Locate branches and worship centers through the official JA1 finder.
+              </p>
+              <Button className="mt-4 border-primary bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                <Link href="https://find.ja1church.com/" target="_blank" rel="noreferrer">
+                  Open find.ja1church.com
+                </Link>
+              </Button>
             </div>
-            <h2 className="text-3xl font-bold tracking-tight">Find JA1</h2>
-            <p className="mt-3 text-lg text-muted-foreground">
-              Locate branches and worship centers through the official JA1 finder.
-            </p>
-            <Button className="mt-4" variant="outline" asChild>
-              <Link href="https://find.ja1church.com/" target="_blank" rel="noreferrer">
-                Open find.ja1church.com
-              </Link>
-            </Button>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl rounded-2xl border border-primary/20 bg-primary/10 px-6 py-14 text-center sm:px-10">
+        <section className="w-full bg-white py-14">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl rounded-2xl border border-primary/20 bg-[#E7D2DD] px-6 py-14 text-center sm:px-10">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Purpose of the JA1 System
             </h2>
@@ -200,6 +183,7 @@ export default function Home() {
             <Button size="lg" className="mt-8" asChild>
               <Link href="/signup">Get Started Now</Link>
             </Button>
+            </div>
           </div>
         </section>
       </main>

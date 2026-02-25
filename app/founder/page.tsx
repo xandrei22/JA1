@@ -11,7 +11,7 @@ export default function FounderPage() {
           This page is dedicated to the founder of JA1 and the ministry vision.
         </p>
 
-        <section className="mt-8 space-y-4 text-muted-foreground">
+        <section className="mt-8 space-y-4 bg-[#C3C3C3] text-muted-foreground">
           <h2 className="text-xl font-semibold tracking-tight text-foreground">Founder Information</h2>
           <p>
             Add the founder&apos;s name, testimony, calling, and vision statement for the church.

@@ -2,20 +2,18 @@
 
 import * as React from "react"
 import {
-  BookOpen,
-  Bot,
+  Building2,
+  ClipboardCheck,
   Command,
-  Frame,
+  LayoutDashboard,
   LifeBuoy,
-  Map,
-  PieChart,
+  ShieldCheck,
   Send,
   Settings2,
-  SquareTerminal,
+  Users,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -28,100 +26,100 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  navMain: [
+type AppSidebarUser = {
+  name: string
+  email: string
+  role: string
+  branchCode: string | null
+  ageGroup: string | null
+}
+
+type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  user: AppSidebarUser
+  permissions: string[]
+}
+
+function hasPermission(permissions: string[], permission: string) {
+  return permissions.includes(permission)
+}
+
+export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
+  const navMain = [
     {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: LayoutDashboard,
       isActive: true,
       items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
+        { title: "Overview", url: "/dashboard" },
       ],
     },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
+    ...(hasPermission(permissions, "attendance:log") || hasPermission(permissions, "attendance:view")
+      ? [
+          {
+            title: "Attendance",
+            url: "#",
+            icon: ClipboardCheck,
+            items: [
+              ...(hasPermission(permissions, "attendance:log") ? [{ title: "Log Attendance", url: "#" }] : []),
+              ...(hasPermission(permissions, "attendance:view") ? [{ title: "View Attendance", url: "#" }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "member:manage")
+      ? [
+          {
+            title: "Members",
+            url: "#",
+            icon: Users,
+            items: [
+              { title: "Manage Members", url: "#" },
+              { title: "Reset Credentials", url: "#" },
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "age_group:manage")
+      ? [
+          {
+            title: "Age Groups",
+            url: "#",
+            icon: Users,
+            items: [{ title: "Manage Age Groups", url: "#" }],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "branch:manage") || hasPermission(permissions, "satellite:view") || hasPermission(permissions, "first_timers:view")
+      ? [
+          {
+            title: "Branches",
+            url: "#",
+            icon: Building2,
+            items: [
+              ...(hasPermission(permissions, "branch:manage") ? [{ title: "Manage Branches", url: "#" }] : []),
+              ...(hasPermission(permissions, "satellite:view") ? [{ title: "Satellite Centers", url: "#" }] : []),
+              ...(hasPermission(permissions, "first_timers:view") ? [{ title: "First Timers", url: "#" }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "settings:manage") || hasPermission(permissions, "system:manage")
+      ? [
+          {
+            title: "Administration",
+            url: "#",
+            icon: Settings2,
+            items: [
+              ...(hasPermission(permissions, "settings:manage") ? [{ title: "Settings", url: "#" }] : []),
+              ...(hasPermission(permissions, "system:manage") ? [{ title: "System Controls", url: "#" }] : []),
+            ],
+          },
+        ]
+      : []),
+  ]
+
+  const navSecondary = [
     {
       title: "Support",
       url: "#",
@@ -132,40 +130,21 @@ const data = {
       url: "#",
       icon: Send,
     },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
-}
+  ]
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <a href="/dashboard">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Acme Inc</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate font-medium">JA1 Dashboard</span>
+                  <span className="truncate text-xs">{user.branchCode ?? "No branch"}</span>
                 </div>
               </a>
             </SidebarMenuButton>
@@ -173,12 +152,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavMain items={navMain} />
+        <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser
+          user={{
+            name: user.name,
+            email: user.email,
+            avatar: "/JA1mlogo.svg",
+          }}
+        />
       </SidebarFooter>
     </Sidebar>
   )

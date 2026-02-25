@@ -20,6 +20,7 @@ import {
 } from "@/lib/age-group"
 import { useRouter } from "next/navigation"
 import { type FormEvent, useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
 
 export function SignupForm({
   className,
@@ -29,6 +30,8 @@ export function SignupForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [birthday, setBirthday] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   async function handleSignup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -198,18 +201,45 @@ export function SignupForm({
                 <Field className="grid grid-cols-2 gap-3">
                   <Field>
                     <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <Input id="password" name="password" type="password" required />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        required
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((value) => !value)}
+                        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="confirm-password">
                       Confirm Password
                     </FieldLabel>
-                    <Input
-                      id="confirm-password"
-                      name="confirm-password"
-                      type="password"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        name="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        required
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((value) => !value)}
+                        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
                   </Field>
                 </Field>
                 <FieldDescription>

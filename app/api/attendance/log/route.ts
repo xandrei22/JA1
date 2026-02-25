@@ -26,25 +26,41 @@ export async function POST(request: Request) {
     sourceCode?: string
   }
 
+  let memberId = body.memberId?.trim() ?? ""
+
+  if (!memberId && body.method === "qr" && body.sourceCode) {
+    try {
+      const parsed = JSON.parse(body.sourceCode) as { memberId?: string }
+      if (typeof parsed.memberId === "string") {
+        memberId = parsed.memberId.trim()
+      }
+    } catch {
+      // keep memberId empty and fail validation below
+    }
+  }
+
+  const branchCode = body.branchCode?.trim() || session.user.branchCode || "DUM"
+  const eventCode = body.eventCode?.trim() ?? ""
+  const sourceCode = body.sourceCode?.trim() ?? ""
+
   if (
-    !body.memberId ||
-    !body.eventCode ||
-    !body.branchCode ||
+    !memberId ||
+    !eventCode ||
     !body.method ||
-    !body.sourceCode
+    !sourceCode
   ) {
     return NextResponse.json(
-      { error: "memberId, eventCode, branchCode, method, and sourceCode are required" },
+      { error: "memberId, eventCode, method, and sourceCode are required" },
       { status: 400 }
     )
   }
 
   const result = await logAttendance({
-    memberId: body.memberId,
-    eventCode: body.eventCode,
-    branchCode: body.branchCode,
+    memberId,
+    eventCode,
+    branchCode,
     method: body.method,
-    sourceCode: body.sourceCode,
+    sourceCode,
     loggedByUserId: session.user.id,
   })
 
