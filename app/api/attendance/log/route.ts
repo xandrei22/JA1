@@ -2,8 +2,38 @@ import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
 
 import { authOptions } from "@/lib/server/auth-options"
-import { logAttendance } from "@/lib/server/attendance-service"
+import {
+  getMemberNameById,
+  listAttendanceLogs,
+  logAttendance,
+} from "@/lib/server/attendance-service"
 import { hasPermission, PERMISSIONS, type Role } from "@/lib/server/rbac"
+
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const role = (session.user.role ?? "") as Role
+
+  if (!hasPermission(role, PERMISSIONS.ATTENDANCE_VIEW)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const url = new URL(request.url)
+  const limitParam = Number(url.searchParams.get("limit") ?? "20")
+  const branchCode =
+    url.searchParams.get("branchCode")?.trim() || session.user.branchCode || "DUM"
+
+  const result = await listAttendanceLogs({
+    branchCode,
+    limit: Number.isFinite(limitParam) ? limitParam : 20,
+  })
+
+  return NextResponse.json(result)
+}
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -20,6 +50,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     memberId?: string
+    memberName?: string
     eventCode?: string
     branchCode?: string
     method?: "qr" | "manual"
@@ -40,6 +71,7 @@ export async function POST(request: Request) {
   }
 
   const branchCode = body.branchCode?.trim() || session.user.branchCode || "DUM"
+  const memberName = body.memberName?.trim() ?? ""
   const eventCode = body.eventCode?.trim() ?? ""
   const sourceCode = body.sourceCode?.trim() ?? ""
 
@@ -55,6 +87,22 @@ export async function POST(request: Request) {
     )
   }
 
+  const resolvedMemberName = await getMemberNameById(memberId)
+
+  if (memberName && resolvedMemberName) {
+    const normalizedProvidedName = memberName.trim().toLowerCase()
+    const normalizedMemberName = resolvedMemberName.trim().toLowerCase()
+
+    if (normalizedProvidedName !== normalizedMemberName) {
+      return NextResponse.json(
+        {
+          error: "Name confirmation does not match member record.",
+        },
+        { status: 400 }
+      )
+    }
+  }
+
   const result = await logAttendance({
     memberId,
     eventCode,
@@ -64,5 +112,8 @@ export async function POST(request: Request) {
     loggedByUserId: session.user.id,
   })
 
-  return NextResponse.json(result)
+  return NextResponse.json({
+    ...result,
+    memberName: resolvedMemberName ?? memberName ?? memberId,
+  })
 }

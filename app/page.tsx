@@ -74,31 +74,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="w-full bg-zinc-200 py-14">
-          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                JA1 + System Overview
-              </h2>
-              <p className="mt-3 text-lg text-muted-foreground">
-                The homepage now focuses on both ministry identity and the platform purpose.
-              </p>
-            </div>
-
-            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {highlights.map(({ title, description, icon: Icon }) => (
-                <div key={title} className="rounded-xl border border-primary/40 bg-card p-6 text-center shadow-lg">
-                  <div className="mx-auto mb-4 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-                    <Icon className="size-5" />
-                  </div>
-                  <h3 className="text-2xl font-semibold leading-tight">{title}</h3>
-                  <p className="mt-3 text-lg text-muted-foreground">{description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         <section id="gallery-section" className="w-full py-0">
             <div className="w-full">
               <Carousel className="h-full w-full">
@@ -123,7 +98,32 @@ export default function Home() {
             </div>
         </section>
 
-        <section id="founder-section" className="w-full bg-muted/40 py-10">
+        <section className="w-full bg-white py-14">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                JA1 + System Overview
+              </h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                The homepage now focuses on both ministry identity and the platform purpose.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {highlights.map(({ title, description, icon: Icon }) => (
+                <div key={title} className="rounded-xl border border-primary/40 bg-card p-6 text-center shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl">
+                  <div className="mx-auto mb-4 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="text-2xl font-semibold leading-tight">{title}</h3>
+                  <p className="mt-3 text-lg text-muted-foreground">{description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="founder-section" className="w-full bg-zinc-100 py-10">
           <div className="mx-auto grid min-h-[50vh] w-full max-w-6xl gap-6 px-4 md:grid-cols-2 md:items-stretch sm:px-6 lg:px-8">
             <div className="flex flex-col justify-center">
               <h2 className="text-3xl font-bold tracking-tight">Who Is the Founder</h2>
@@ -150,39 +150,47 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="find-section" className="w-full bg-primary/10 py-8">
+        <section id="find-section" className="w-full bg-white py-14">
           <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="rounded-xl border border-primary/40 bg-background p-6 text-center">
-              <div className="mb-3 flex justify-center">
-                <div className="inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-                  <Compass className="size-5" />
+            <div className="grid gap-6 md:grid-cols-2 md:items-stretch">
+              <div className="h-full rounded-xl border border-primary/40 bg-background p-6 text-center shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl">
+                <div className="flex h-full flex-col items-center gap-8">
+                  <div>
+                    <div className="mb-3 flex justify-center">
+                      <div className="inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
+                        <Compass className="size-5" />
+                      </div>
+                    </div>
+                    <h2 className="text-3xl font-bold tracking-tight">Find JA1</h2>
+                    <p className="mt-3 text-lg text-muted-foreground">
+                      Locate branches and worship centers through the official JA1 finder.
+                    </p>
+                  </div>
+
+                  <Button size="lg" className="mt-auto border-primary bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                    <Link href="https://find.ja1church.com/" target="_blank" rel="noreferrer">
+                      Open find.ja1church.com
+                    </Link>
+                  </Button>
                 </div>
               </div>
-              <h2 className="text-3xl font-bold tracking-tight">Find JA1</h2>
-              <p className="mt-3 text-lg text-muted-foreground">
-                Locate branches and worship centers through the official JA1 finder.
-              </p>
-              <Button className="mt-4 border-primary bg-primary text-primary-foreground hover:bg-primary/90" asChild>
-                <Link href="https://find.ja1church.com/" target="_blank" rel="noreferrer">
-                  Open find.ja1church.com
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
 
-        <section className="w-full bg-white py-14">
-          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-3xl rounded-2xl border border-primary/20 bg-[#E7D2DD] px-6 py-14 text-center sm:px-10">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Purpose of the JA1 System
-            </h2>
-            <p className="mt-4 text-lg text-muted-foreground">
-              To maintain accurate records during every service using randomized QR codes, manual backup attendance codes, and centralized role-based oversight.
-            </p>
-            <Button size="lg" className="mt-8" asChild>
-              <Link href="/signup">Get Started Now</Link>
-            </Button>
+              <div className="h-full rounded-2xl border border-primary/20 bg-[#E7D2DD] px-6 pb-6 pt-14 text-center text-foreground shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl sm:px-10">
+                <div className="flex h-full flex-col items-center gap-8">
+                  <div>
+                    <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                      Purpose of the JA1 System
+                    </h2>
+                    <p className="mt-4 text-lg">
+                      To maintain accurate records during every service using randomized QR codes, manual backup attendance codes, and centralized role-based oversight.
+                    </p>
+                  </div>
+
+                  <Button size="lg" className="mt-auto" asChild>
+                    <Link href="/signup">Get Started Now</Link>
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </section>

@@ -10,6 +10,8 @@ create type public.user_role as enum (
   'age_group_leader'
 );
 
+alter type public.user_role add value if not exists 'member';
+
 create type public.attendance_method as enum ('qr', 'manual');
 
 create table if not exists public.branches (
@@ -279,6 +281,56 @@ values
   ('AMW', 'Age Group AMW'),
   ('AS', 'Age Group AS')
 on conflict (code) do nothing;
+
+create table if not exists public.journey_invitations (
+  id uuid primary key default gen_random_uuid(),
+  invited_email text not null,
+  age_group text not null,
+  invited_by_user_id uuid,
+  invited_by_role text not null,
+  status text not null default 'pending',
+  created_at timestamptz not null default now(),
+  accepted_at timestamptz
+);
+
+create index if not exists idx_journey_invitations_email
+  on public.journey_invitations(invited_email);
+
+create table if not exists public.journey_memberships (
+  id uuid primary key default gen_random_uuid(),
+  user_email text not null unique,
+  age_group text not null,
+  invitation_id uuid references public.journey_invitations(id) on delete set null,
+  joined_at timestamptz not null default now()
+);
+
+create table if not exists public.branch_recognition_requests (
+  id uuid primary key default gen_random_uuid(),
+  branch_code text not null,
+  requested_by_user_id uuid,
+  requested_by_role text not null,
+  note text not null,
+  status text not null default 'pending',
+  created_at timestamptz not null default now(),
+  approved_by_user_id uuid,
+  approved_at timestamptz
+);
+
+create index if not exists idx_branch_recognition_branch_status
+  on public.branch_recognition_requests(branch_code, status);
+
+create table if not exists public.branch_announcements (
+  id uuid primary key default gen_random_uuid(),
+  branch_code text not null,
+  title text not null,
+  message text not null,
+  created_by_user_id uuid,
+  created_by_role text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_branch_announcements_branch_created
+  on public.branch_announcements(branch_code, created_at desc);
 ```
 
 ## Notes

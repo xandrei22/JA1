@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 
 import { verifyPassword } from "@/lib/server/password"
-import { resolveRoleByEmail } from "@/lib/server/rbac"
+import { resolveRoleByEmail, ROLES, type Role } from "@/lib/server/rbac"
 import { isSupabaseConfigured, selectSupabaseSingle } from "@/lib/server/supabase-admin"
 
 type SeedUser = {
@@ -11,8 +11,21 @@ type SeedUser = {
   email: string
   password: string
   name: string
+  role: Role
   branchCode: string | null
   ageGroup: string | null
+}
+
+function isRole(value: string): value is Role {
+  return Object.values(ROLES).includes(value as Role)
+}
+
+function resolveSafeRole(inputRole: string | undefined, email: string): Role {
+  if (inputRole && isRole(inputRole)) {
+    return inputRole
+  }
+
+  return resolveRoleByEmail(email)
 }
 
 function loadSeedUsers(): SeedUser[] {
@@ -25,6 +38,7 @@ function loadSeedUsers(): SeedUser[] {
         email: "vip@ja1.local",
         password: "ChangeMe123!",
         name: "VIP Chairman",
+        role: ROLES.VIP_CHAIRMAN,
         branchCode: "DUM",
         ageGroup: null,
       },
@@ -33,6 +47,7 @@ function loadSeedUsers(): SeedUser[] {
         email: "pastor@ja1.local",
         password: "ChangeMe123!",
         name: "Supervising Pastor",
+        role: ROLES.SUPERVISING_PASTOR,
         branchCode: "DUM",
         ageGroup: null,
       },
@@ -41,6 +56,7 @@ function loadSeedUsers(): SeedUser[] {
         email: "chairman@ja1.local",
         password: "ChangeMe123!",
         name: "Age Group Chairman",
+        role: ROLES.AGE_GROUP_CHAIRMAN,
         branchCode: "DUM",
         ageGroup: "AY",
       },
@@ -49,6 +65,7 @@ function loadSeedUsers(): SeedUser[] {
         email: "leader@ja1.local",
         password: "ChangeMe123!",
         name: "Age Group Leader",
+        role: ROLES.AGE_GROUP_LEADER,
         branchCode: "DUM",
         ageGroup: "AY",
       },
@@ -56,8 +73,31 @@ function loadSeedUsers(): SeedUser[] {
   }
 
   try {
-    const parsed = JSON.parse(raw) as SeedUser[]
+    const parsed = JSON.parse(raw) as Array<{
+      id?: string
+      email?: string
+      password?: string
+      name?: string
+      role?: string
+      branchCode?: string | null
+      ageGroup?: string | null
+    }>
+
     return parsed
+      .filter((entry) => Boolean(entry.email && entry.password))
+      .map((entry, index) => {
+        const email = String(entry.email).toLowerCase().trim()
+
+        return {
+          id: entry.id ?? `seed-user-${index + 1}`,
+          email,
+          password: String(entry.password),
+          name: entry.name ?? email,
+          role: resolveSafeRole(entry.role, email),
+          branchCode: entry.branchCode ?? null,
+          ageGroup: entry.ageGroup ?? null,
+        }
+      })
   } catch {
     return []
   }
@@ -115,7 +155,7 @@ const providers: NextAuthOptions["providers"] = [
         id: user.id,
         email: user.email,
         name: user.name,
-        role: resolveRoleByEmail(user.email),
+        role: user.role,
         branchCode: user.branchCode,
         ageGroup: user.ageGroup,
       }
@@ -142,8 +182,9 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
-      if (user?.email) {
-        token.role = resolveRoleByEmail(user.email)
+      if (user) {
+        const incomingRole = (user as { role?: string }).role
+        token.role = resolveSafeRole(incomingRole, user.email ?? "")
         token.branchCode = (user as { branchCode?: string | null }).branchCode ?? null
         token.ageGroup = (user as { ageGroup?: string | null }).ageGroup ?? null
       }
@@ -153,7 +194,10 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub ?? ""
-        session.user.role = token.role as string
+        session.user.role = resolveSafeRole(
+          typeof token.role === "string" ? token.role : undefined,
+          session.user.email ?? ""
+        )
         session.user.branchCode = (token.branchCode as string | null) ?? null
         session.user.ageGroup = (token.ageGroup as string | null) ?? null
       }

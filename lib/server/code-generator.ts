@@ -20,3 +20,39 @@ export function buildQrPayload(memberId: string, token: string): string {
     issuedAt: new Date().toISOString(),
   })
 }
+
+export function generateEventCode(eventName: string, eventDate: string): string {
+  const cleanEventName = eventName
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 16)
+
+  const normalizedDate = eventDate.replace(/-/g, "")
+  const serial = randomBytes(2).toString("hex").toUpperCase()
+
+  return `${cleanEventName || "EVENT"}-${normalizedDate}-${serial}`
+}
+
+export function buildSessionQrPayload(input: {
+  branchCode: string
+  eventCode: string
+  eventName: string
+  eventPlace: string
+  eventDate: string
+  eventTime: string
+  equivalentCode: string
+}): string {
+  return JSON.stringify({
+    type: "attendance_session",
+    branchCode: input.branchCode,
+    eventCode: input.eventCode,
+    eventName: input.eventName,
+    eventPlace: input.eventPlace,
+    eventDate: input.eventDate,
+    eventTime: input.eventTime,
+    equivalentCode: input.equivalentCode,
+    issuedAt: new Date().toISOString(),
+  })
+}

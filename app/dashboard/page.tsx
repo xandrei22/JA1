@@ -1,7 +1,25 @@
 import { AppSidebar } from "@/components/app-sidebar"
+import { AverageAttendanceChart } from "@/components/average-attendance-chart"
+import { AgeGroupTool } from "@/components/age-group-tool"
+import { AttendanceReports } from "@/components/attendance-reports"
+import { BranchApprovalsPanel } from "@/components/branch-approvals-panel"
+import { BranchRecognitionPanel } from "@/components/branch-recognition-panel"
+import { BranchBackupGenerator } from "@/components/branch-backup-generator"
+import { EventAnnouncementsPanel } from "@/components/event-announcements-panel"
+import { JourneyAccessPanel } from "@/components/journey-access-panel"
+import { JourneyInvitationManager } from "@/components/journey-invitation-manager"
+import { MemberCredentialIssuer } from "@/components/member-credential-issuer"
+import { MemberMonitorPanel } from "@/components/member-monitor-panel"
 import { MemberQrScanner } from "@/components/member-qr-scanner"
 import { authOptions } from "@/lib/server/auth-options"
-import { hasPermission, PERMISSIONS, ROLES, type Role } from "@/lib/server/rbac"
+import { getSuperAdminDashboardMetrics } from "@/lib/server/dashboard-metrics"
+import {
+  hasDirectJourneyAccess,
+  hasPermission,
+  PERMISSIONS,
+  ROLES,
+  type Role,
+} from "@/lib/server/rbac"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,7 +37,13 @@ import {
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 
-export default async function Page() {
+type DashboardPageProps = {
+  searchParams?: Promise<{
+    section?: string
+  }>
+}
+
+export default async function Page({ searchParams }: DashboardPageProps) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user) {
@@ -32,57 +56,78 @@ export default async function Page() {
     hasPermission(role, permission)
   )
 
-  const capabilities = [
-    {
-      title: "Attendance Logging",
-      description: "Record service attendance using QR or backup code workflows.",
-      permission: PERMISSIONS.ATTENDANCE_LOG,
-    },
-    {
-      title: "Attendance Reports",
-      description: "Review and verify attendance records for your scope.",
-      permission: PERMISSIONS.ATTENDANCE_VIEW,
-    },
-    {
-      title: "Member Management",
-      description: "Update member profiles and maintain account credentials.",
-      permission: PERMISSIONS.MEMBER_MANAGE,
-    },
-    {
-      title: "Age Group Management",
-      description: "Manage age-group structure and leadership assignments.",
-      permission: PERMISSIONS.AGE_GROUP_MANAGE,
-    },
-    {
-      title: "Branch Management",
-      description: "Handle branch-level setup, coverage, and assignments.",
-      permission: PERMISSIONS.BRANCH_MANAGE,
-    },
-    {
-      title: "Satellite View",
-      description: "View satellite and outreach center ministry data.",
-      permission: PERMISSIONS.SATELLITE_VIEW,
-    },
-    {
-      title: "First Timers View",
-      description: "Track first-time attendees and follow-up activity.",
-      permission: PERMISSIONS.FIRST_TIMER_VIEW,
-    },
-    {
-      title: "Settings Management",
-      description: "Configure system and ministry settings.",
-      permission: PERMISSIONS.SETTINGS_MANAGE,
-    },
-    {
-      title: "System Administration",
-      description: "Control central system-wide administrative functions.",
-      permission: PERMISSIONS.SYSTEM_MANAGE,
-    },
-  ]
-
-  const allowedCapabilities = capabilities.filter((capability) =>
-    hasPermission(role, capability.permission)
+  const canLogAttendance = hasPermission(role, PERMISSIONS.ATTENDANCE_LOG)
+  const canViewAttendance = hasPermission(role, PERMISSIONS.ATTENDANCE_VIEW)
+  const canManageMembers = hasPermission(role, PERMISSIONS.MEMBER_MANAGE)
+  const canManageAgeGroups = hasPermission(role, PERMISSIONS.AGE_GROUP_MANAGE)
+  const canMonitorMembers = hasPermission(role, PERMISSIONS.MEMBER_MONITOR)
+  const canMonitorCompliance = hasPermission(role, PERMISSIONS.AGE_GROUP_COMPLIANCE_MONITOR)
+  const canManageBranches = hasPermission(role, PERMISSIONS.BRANCH_MANAGE)
+  const canRequestBranchRecognition = hasPermission(
+    role,
+    PERMISSIONS.BRANCH_RECOGNITION_REQUEST
   )
+  const canApproveBranches = hasPermission(role, PERMISSIONS.BRANCH_APPROVE)
+  const canViewSatellites = hasPermission(role, PERMISSIONS.SATELLITE_VIEW)
+  const canViewFirstTimers = hasPermission(role, PERMISSIONS.FIRST_TIMER_VIEW)
+  const canManageSettings = hasPermission(role, PERMISSIONS.SETTINGS_MANAGE)
+  const canManageSystem = hasPermission(role, PERMISSIONS.SYSTEM_MANAGE)
+  const canViewAnnouncements = hasPermission(role, PERMISSIONS.ANNOUNCEMENT_VIEW)
+  const canManageAnnouncements = hasPermission(role, PERMISSIONS.ANNOUNCEMENT_MANAGE)
+  const canAccessJourney = hasPermission(role, PERMISSIONS.JOURNEY_ACCESS)
+  const canInviteJourney = hasPermission(role, PERMISSIONS.JOURNEY_INVITE)
+  const directJourneyAccess = hasDirectJourneyAccess(role)
+  const isSuperAdmin = role === ROLES.VIP_CHAIRMAN
+  const superAdminMetrics = isSuperAdmin
+    ? await getSuperAdminDashboardMetrics()
+    : null
+
+  const resolvedSearchParams = (await searchParams) ?? {}
+  const section = resolvedSearchParams.section ?? "dashboard"
+
+  const sectionPermissions: Record<string, boolean> = {
+    dashboard: true,
+    "attendance-log": canLogAttendance,
+    "attendance-view": canViewAttendance,
+    "member-monitor": canMonitorMembers,
+    "age-compliance": canMonitorCompliance,
+    "member-management": canManageMembers,
+    "age-group-management": canManageAgeGroups,
+    "branch-management": canManageBranches,
+    "branch-recognition": canRequestBranchRecognition,
+    "branch-approvals": canApproveBranches,
+    "satellite-view": canViewSatellites,
+    "first-timers-view": canViewFirstTimers,
+    announcements: canViewAnnouncements,
+    settings: canManageSettings,
+    "system-controls": canManageSystem,
+    journey: canAccessJourney,
+    "journey-invitations": canInviteJourney,
+  }
+
+  const isAllowedSection = sectionPermissions[section] ?? false
+
+  const sectionTitleMap: Record<string, string> = {
+    dashboard: "Dashboard",
+    "attendance-log": "Attendance Log",
+    "attendance-view": "Attendance Reports",
+    "member-monitor": "Member Monitoring",
+    "age-compliance": "Age Group Compliance",
+    "member-management": "Member Management",
+    "age-group-management": "Age Group Management",
+    "branch-management": "Branch Management",
+    "branch-recognition": "Branch Recognition",
+    "branch-approvals": "Branch Approvals",
+    "satellite-view": "Satellite Centers",
+    "first-timers-view": "First Timers",
+    announcements: "Event Announcements",
+    settings: "Settings",
+    "system-controls": "System Controls",
+    journey: "My Journey",
+    "journey-invitations": "Journey Invitations",
+  }
+
+  const sectionTitle = sectionTitleMap[section] ?? "Dashboard"
 
   return (
     <SidebarProvider>
@@ -114,7 +159,7 @@ export default async function Page() {
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
                   <BreadcrumbPage>
-                    {session.user.role} · {session.user.branchCode ?? "N/A"}
+                    {sectionTitle} · {session.user.role}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -122,26 +167,132 @@ export default async function Page() {
           </div>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-          <div className="rounded-xl border bg-card p-5">
-            <h2 className="text-xl font-semibold">What You Can Do</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Access is based on your role: {session.user.role}
-            </p>
-          </div>
+          {!isAllowedSection ? (
+            <div className="rounded-xl border bg-card p-5">
+              <h3 className="font-semibold">Access Restricted</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Your current role does not have access to this section.
+              </p>
+            </div>
+          ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {allowedCapabilities.map((capability) => (
-              <div key={capability.title} className="rounded-xl border bg-card p-5">
-                <h3 className="font-semibold">{capability.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {capability.description}
+          {section === "dashboard" && isSuperAdmin && superAdminMetrics ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <AverageAttendanceChart
+                mainChurchAverageAttendees={
+                  superAdminMetrics.mainChurchAverageAttendees
+                }
+                allBranchesAverageAttendees={
+                  superAdminMetrics.allBranchesAverageAttendees
+                }
+              />
+              <div className="rounded-xl border bg-card p-5">
+                <h3 className="font-semibold">New Approval Requests</h3>
+                <p className="mt-2 text-2xl font-bold">
+                  {superAdminMetrics.pendingApprovalRequests}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pending branch recognition approvals.
                 </p>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : null}
 
-          {hasPermission(role, PERMISSIONS.ATTENDANCE_LOG) ? (
-            <MemberQrScanner branchCode={session.user.branchCode ?? "DUM"} />
+          {isSuperAdmin && superAdminMetrics?.note ? (
+            <p className="text-sm text-muted-foreground">{superAdminMetrics.note}</p>
+          ) : null}
+
+          {section === "attendance-log" && canLogAttendance ? (
+            <MemberQrScanner
+              branchCode={session.user.branchCode ?? "DUM"}
+              defaultMemberName={session.user.name ?? ""}
+            />
+          ) : null}
+
+          {section === "attendance-view" && canViewAttendance ? (
+            <AttendanceReports branchCode={session.user.branchCode ?? "DUM"} />
+          ) : null}
+
+          {section === "member-monitor" && canMonitorMembers ? (
+            <MemberMonitorPanel canViewCompliance={canMonitorCompliance} />
+          ) : null}
+
+          {section === "age-compliance" && canMonitorCompliance ? (
+            <MemberMonitorPanel canViewCompliance />
+          ) : null}
+
+          {section === "member-management" && canManageMembers ? (
+            <MemberCredentialIssuer branchCode={session.user.branchCode ?? "DUM"} />
+          ) : null}
+
+          {section === "age-group-management" && canManageAgeGroups ? (
+            <AgeGroupTool />
+          ) : null}
+
+          {section === "branch-management" && canManageBranches ? (
+            <BranchBackupGenerator branchCode={session.user.branchCode ?? "DUM"} />
+          ) : null}
+
+          {section === "branch-recognition" && canRequestBranchRecognition ? (
+            <BranchRecognitionPanel
+              branchCode={session.user.branchCode ?? "DUM"}
+              canApproveBranches={canApproveBranches}
+            />
+          ) : null}
+
+          {section === "branch-approvals" && canApproveBranches ? (
+            <BranchApprovalsPanel />
+          ) : null}
+
+          {section === "satellite-view" && canViewSatellites ? (
+            <div className="rounded-xl border bg-card p-5">
+              <h3 className="font-semibold">Satellite Centers</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Satellite center monitoring module is enabled for your role.
+              </p>
+            </div>
+          ) : null}
+
+          {section === "first-timers-view" && canViewFirstTimers ? (
+            <div className="rounded-xl border bg-card p-5">
+              <h3 className="font-semibold">First Timers</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                First-timer follow-up module is enabled for your role.
+              </p>
+            </div>
+          ) : null}
+
+          {section === "settings" && canManageSettings ? (
+            <div className="rounded-xl border bg-card p-5">
+              <h3 className="font-semibold">Settings</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                System settings management module is enabled for your role.
+              </p>
+            </div>
+          ) : null}
+
+          {section === "system-controls" && canManageSystem ? (
+            <div className="rounded-xl border bg-card p-5">
+              <h3 className="font-semibold">System Controls</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Central administration controls are enabled for your role.
+              </p>
+            </div>
+          ) : null}
+
+          {section === "announcements" && canViewAnnouncements ? (
+            <EventAnnouncementsPanel
+              branchCode={session.user.branchCode ?? "DUM"}
+              canManage={canManageAnnouncements}
+            />
+          ) : null}
+
+          {section === "journey" && canAccessJourney ? (
+            <JourneyAccessPanel hasDirectAccess={directJourneyAccess} />
+          ) : null}
+
+          {section === "journey-invitations" && canInviteJourney ? (
+            <JourneyInvitationManager />
           ) : null}
 
           <div className="rounded-xl border bg-card p-5">

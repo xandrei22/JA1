@@ -73,3 +73,65 @@ export async function selectSupabaseSingle<T>(
   const result = (await response.json()) as T[]
   return result[0] ?? null
 }
+
+export async function selectSupabaseRows<T>(input: {
+  table: string
+  filters?: Record<string, string | number | boolean>
+  limit?: number
+  orderBy?: string
+  ascending?: boolean
+}): Promise<T[]> {
+  const query = new URLSearchParams({
+    select: "*",
+    limit: String(input.limit ?? 20),
+  })
+
+  Object.entries(input.filters ?? {}).forEach(([key, value]) => {
+    query.set(key, `eq.${value}`)
+  })
+
+  if (input.orderBy) {
+    query.set("order", `${input.orderBy}.${input.ascending ? "asc" : "desc"}`)
+  }
+
+  const response = await fetch(`${endpoint(input.table)}?${query.toString()}`, {
+    method: "GET",
+    headers: getHeaders(),
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    throw new Error(`Supabase select failed (${response.status}): ${details}`)
+  }
+
+  return (await response.json()) as T[]
+}
+
+export async function updateSupabaseRows<T extends Record<string, unknown>>(input: {
+  table: string
+  filters: Record<string, string | number | boolean>
+  payload: Record<string, unknown>
+}): Promise<T[]> {
+  const query = new URLSearchParams({
+    select: "*",
+  })
+
+  Object.entries(input.filters).forEach(([key, value]) => {
+    query.set(key, `eq.${value}`)
+  })
+
+  const response = await fetch(`${endpoint(input.table)}?${query.toString()}`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify(input.payload),
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    const details = await response.text()
+    throw new Error(`Supabase update failed (${response.status}): ${details}`)
+  }
+
+  return (await response.json()) as T[]
+}

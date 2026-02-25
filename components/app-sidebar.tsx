@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  Bell,
   Building2,
   ClipboardCheck,
   Command,
@@ -47,12 +48,8 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
   const navMain = [
     {
       title: "Dashboard",
-      url: "/dashboard",
+      url: "/dashboard?section=dashboard",
       icon: LayoutDashboard,
-      isActive: true,
-      items: [
-        { title: "Overview", url: "/dashboard" },
-      ],
     },
     ...(hasPermission(permissions, "attendance:log") || hasPermission(permissions, "attendance:view")
       ? [
@@ -61,8 +58,25 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             url: "#",
             icon: ClipboardCheck,
             items: [
-              ...(hasPermission(permissions, "attendance:log") ? [{ title: "Log Attendance", url: "#" }] : []),
-              ...(hasPermission(permissions, "attendance:view") ? [{ title: "View Attendance", url: "#" }] : []),
+              ...(hasPermission(permissions, "attendance:log") ? [{ title: "Log Attendance", url: "/dashboard?section=attendance-log" }] : []),
+              ...(hasPermission(permissions, "attendance:view") ? [{ title: "View Attendance", url: "/dashboard?section=attendance-view" }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "member:monitor") || hasPermission(permissions, "age_group:compliance_monitor")
+      ? [
+          {
+            title: "Monitoring",
+            url: "#",
+            icon: Users,
+            items: [
+              ...(hasPermission(permissions, "member:monitor")
+                ? [{ title: "Members Scope", url: "/dashboard?section=member-monitor" }]
+                : []),
+              ...(hasPermission(permissions, "age_group:compliance_monitor")
+                ? [{ title: "Age Compliance", url: "/dashboard?section=age-compliance" }]
+                : []),
             ],
           },
         ]
@@ -74,8 +88,8 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             url: "#",
             icon: Users,
             items: [
-              { title: "Manage Members", url: "#" },
-              { title: "Reset Credentials", url: "#" },
+              { title: "Manage Members", url: "/dashboard?section=member-management" },
+              { title: "Reset Credentials", url: "/dashboard?section=member-management" },
             ],
           },
         ]
@@ -86,7 +100,7 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             title: "Age Groups",
             url: "#",
             icon: Users,
-            items: [{ title: "Manage Age Groups", url: "#" }],
+            items: [{ title: "Manage Age Groups", url: "/dashboard?section=age-group-management" }],
           },
         ]
       : []),
@@ -97,9 +111,38 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             url: "#",
             icon: Building2,
             items: [
-              ...(hasPermission(permissions, "branch:manage") ? [{ title: "Manage Branches", url: "#" }] : []),
-              ...(hasPermission(permissions, "satellite:view") ? [{ title: "Satellite Centers", url: "#" }] : []),
-              ...(hasPermission(permissions, "first_timers:view") ? [{ title: "First Timers", url: "#" }] : []),
+              ...(hasPermission(permissions, "branch:manage") ? [{ title: "Manage Branches", url: "/dashboard?section=branch-management" }] : []),
+              ...(hasPermission(permissions, "satellite:view") ? [{ title: "Satellite Centers", url: "/dashboard?section=satellite-view" }] : []),
+              ...(hasPermission(permissions, "first_timers:view") ? [{ title: "First Timers", url: "/dashboard?section=first-timers-view" }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "branch:recognition_request") || hasPermission(permissions, "branch:approve")
+      ? [
+          {
+            title: "Governance",
+            url: "#",
+            icon: Building2,
+            items: [
+              ...(hasPermission(permissions, "branch:recognition_request")
+                ? [{ title: "Branch Recognition", url: "/dashboard?section=branch-recognition" }]
+                : []),
+              ...(hasPermission(permissions, "branch:approve")
+                ? [{ title: "Approvals", url: "/dashboard?section=branch-approvals" }]
+                : []),
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "announcement:view") || hasPermission(permissions, "announcement:manage")
+      ? [
+          {
+            title: "Announcements",
+            url: "#",
+            icon: Bell,
+            items: [
+              { title: "Event Board", url: "/dashboard?section=announcements" },
             ],
           },
         ]
@@ -111,8 +154,25 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             url: "#",
             icon: Settings2,
             items: [
-              ...(hasPermission(permissions, "settings:manage") ? [{ title: "Settings", url: "#" }] : []),
-              ...(hasPermission(permissions, "system:manage") ? [{ title: "System Controls", url: "#" }] : []),
+              ...(hasPermission(permissions, "settings:manage") ? [{ title: "Settings", url: "/dashboard?section=settings" }] : []),
+              ...(hasPermission(permissions, "system:manage") ? [{ title: "System Controls", url: "/dashboard?section=system-controls" }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(hasPermission(permissions, "journey:access") || hasPermission(permissions, "journey:invite")
+      ? [
+          {
+            title: "Journey",
+            url: "#",
+            icon: ShieldCheck,
+            items: [
+              ...(hasPermission(permissions, "journey:access")
+                ? [{ title: "My Journey", url: "/dashboard?section=journey" }]
+                : []),
+              ...(hasPermission(permissions, "journey:invite")
+                ? [{ title: "Invitations", url: "/dashboard?section=journey-invitations" }]
+                : []),
             ],
           },
         ]
