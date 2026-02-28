@@ -58,7 +58,7 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
     <div id="member-management" className="rounded-xl border bg-card p-5">
       <h3 className="text-lg font-semibold">Member Credential Issuer</h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        Generate a fresh member QR payload and backup code.
+        Generate a fresh member QR payload with equivalent code for manual typing.
       </p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -94,7 +94,7 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
           <p><span className="font-medium">Branch:</span> {credential.branchCode}</p>
           <p><span className="font-medium">QR Token:</span> {credential.qrToken}</p>
           <p className="break-all"><span className="font-medium">QR Payload:</span> {credential.qrPayload}</p>
-          <p><span className="font-medium">Backup Code:</span> {credential.backupCode}</p>
+          <p><span className="font-medium">Equivalent Typed Code:</span> {credential.backupCode}</p>
           <p><span className="font-medium">Generated:</span> {new Date(credential.generatedAt).toLocaleString()}</p>
         </div>
       ) : null}

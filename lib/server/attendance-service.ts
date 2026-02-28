@@ -74,6 +74,10 @@ type SupabaseBranchRow = {
   branch_code: string
 }
 
+type SupabaseMemberCredentialRow = {
+  member_id: string
+}
+
 const inMemoryAttendanceLogs: AttendanceLogRecord[] = []
 const inMemoryAttendanceSessions: AttendanceSessionResult[] = []
 
@@ -213,6 +217,57 @@ export async function getMemberNameById(memberId: string): Promise<string | null
   }
 
   return member.full_name
+}
+
+export async function resolveMemberIdByCredentialCode(code: string): Promise<string | null> {
+  const normalizedCode = code.trim()
+
+  if (!normalizedCode) {
+    return null
+  }
+
+  if (isSupabaseConfigured()) {
+    const byToken = await selectSupabaseRows<SupabaseMemberCredentialRow>({
+      table: "member_credentials",
+      filters: {
+        qr_token: normalizedCode,
+        is_active: true,
+      },
+      limit: 1,
+      orderBy: "generated_at",
+      ascending: false,
+    })
+
+    if (byToken[0]?.member_id) {
+      return byToken[0].member_id
+    }
+
+    const byBackupCode = await selectSupabaseRows<SupabaseMemberCredentialRow>({
+      table: "member_credentials",
+      filters: {
+        backup_code: normalizedCode,
+        is_active: true,
+      },
+      limit: 1,
+      orderBy: "generated_at",
+      ascending: false,
+    })
+
+    if (byBackupCode[0]?.member_id) {
+      return byBackupCode[0].member_id
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(normalizedCode) as { memberId?: string }
+    if (typeof parsed.memberId === "string" && parsed.memberId.trim()) {
+      return parsed.memberId.trim()
+    }
+  } catch {
+    // noop
+  }
+
+  return null
 }
 
 export async function createAttendanceSession(

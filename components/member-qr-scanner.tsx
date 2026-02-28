@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 type MemberQrScannerProps = {
   branchCode: string
   defaultMemberName?: string
+  initialEntryOption?: "scan" | "manual" | null
 }
 
 type ScanStatus = {
@@ -37,14 +38,21 @@ type PendingScan = {
   memberId: string
   sourceCode: string
   memberName: string
+  method: "qr" | "manual"
 }
 
-export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScannerProps) {
+export function MemberQrScanner({
+  branchCode,
+  defaultMemberName,
+  initialEntryOption = null,
+}: MemberQrScannerProps) {
   const { Canvas } = useQRCode()
+  const qrCanvasContainerRef = useRef<HTMLDivElement | null>(null)
   const scannerRef = useRef<{
     stop: () => Promise<void>
     clear: () => Promise<void> | void
   } | null>(null)
+  const manualCodeInputRef = useRef<HTMLInputElement | null>(null)
   const processingRef = useRef(false)
 
   const [eventName, setEventName] = useState("Sunday Service")
@@ -57,10 +65,12 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
   const [isGeneratingSession, setIsGeneratingSession] = useState(false)
   const [isConfirmingName, setIsConfirmingName] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
+  const [entryOption] = useState<"scan" | "manual" | null>(initialEntryOption)
+  const [typedMemberCode, setTypedMemberCode] = useState("")
   const [lastValue, setLastValue] = useState("")
   const [status, setStatus] = useState<ScanStatus>({
     tone: "idle",
-    message: "Generate attendance session QR then scan member QR code.",
+    message: "",
   })
 
   const generateSessionCode = useCallback(async () => {
@@ -175,6 +185,7 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
         memberId,
         sourceCode: decodedText,
         memberName: payload.memberName?.trim() || defaultMemberName || memberId,
+        method: "qr",
       })
 
       setStatus({
@@ -227,7 +238,7 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
         memberName: checkedName,
         eventCode: eventCode.trim(),
         branchCode,
-        method: "qr",
+        method: pendingScan.method,
         sourceCode: pendingScan.sourceCode,
       }),
     })
@@ -258,6 +269,155 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
     })
     setPendingScan(null)
   }, [branchCode, eventCode, pendingScan])
+
+  const resolveTypedMemberCode = useCallback(async () => {
+    const normalizedCode = typedMemberCode.trim()
+
+    if (!normalizedCode) {
+      setStatus({
+        tone: "error",
+        message: "Type a member equivalent code first.",
+      })
+      return
+    }
+
+    setStatus({ tone: "loading", message: "Resolving typed member code..." })
+
+    const response = await fetch(
+      `/api/attendance/member-info?memberCode=${encodeURIComponent(normalizedCode)}`
+    )
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string
+      memberId?: string
+      memberName?: string
+    }
+
+    if (!response.ok || !payload.memberId) {
+      setStatus({
+        tone: "error",
+        message: payload.error ?? "Unable to resolve member from typed code.",
+      })
+      return
+    }
+
+    setPendingScan({
+      memberId: payload.memberId,
+      sourceCode: normalizedCode,
+      memberName: payload.memberName?.trim() || defaultMemberName || payload.memberId,
+      method: "manual",
+    })
+
+    setStatus({
+      tone: "idle",
+      message: "Member code resolved. Confirm the name before submitting attendance.",
+    })
+  }, [defaultMemberName, typedMemberCode])
+
+  const getSessionQrCanvas = useCallback(() => {
+    return qrCanvasContainerRef.current?.querySelector("canvas") ?? null
+  }, [])
+
+  const downloadSessionQrAsImage = useCallback(() => {
+    if (!sessionPayload) {
+      setStatus({ tone: "error", message: "Generate attendance QR first." })
+      return
+    }
+
+    const canvas = getSessionQrCanvas()
+
+    if (!canvas) {
+      setStatus({ tone: "error", message: "QR image is not ready yet. Try again." })
+      return
+    }
+
+    const exportCanvas = document.createElement("canvas")
+    const exportWidth = 420
+    const exportHeight = 560
+    exportCanvas.width = exportWidth
+    exportCanvas.height = exportHeight
+
+    const context = exportCanvas.getContext("2d")
+
+    if (!context) {
+      setStatus({ tone: "error", message: "Unable to prepare image download." })
+      return
+    }
+
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, exportWidth, exportHeight)
+
+    const qrSize = 300
+    const qrX = (exportWidth - qrSize) / 2
+    const qrY = 80
+    context.drawImage(canvas, qrX, qrY, qrSize, qrSize)
+
+    context.fillStyle = "#111827"
+    context.textAlign = "center"
+    context.font = "bold 20px sans-serif"
+    context.fillText("JA1 Attendance QR", exportWidth / 2, 36)
+
+    context.font = "16px sans-serif"
+    context.fillText(`Event Code: ${sessionPayload.eventCode}`, exportWidth / 2, 420)
+    context.fillText(`Equivalent Code: ${sessionPayload.backupCode}`, exportWidth / 2, 452)
+    context.fillText(`${sessionPayload.eventDate} ${sessionPayload.eventTime}`, exportWidth / 2, 484)
+
+    const imageUrl = exportCanvas.toDataURL("image/png")
+    const link = document.createElement("a")
+    const safeEventCode = sessionPayload.eventCode.replace(/[^a-z0-9_-]/gi, "-")
+    link.href = imageUrl
+    link.download = `${safeEventCode}-attendance-qr.png`
+    link.click()
+
+    setStatus({
+      tone: "success",
+      message: `QR image downloaded. Equivalent code: ${sessionPayload.backupCode}`,
+    })
+  }, [getSessionQrCanvas, sessionPayload])
+
+  const downloadSessionQrAsPdf = useCallback(async () => {
+    if (!sessionPayload) {
+      setStatus({ tone: "error", message: "Generate attendance QR first." })
+      return
+    }
+
+    const canvas = getSessionQrCanvas()
+
+    if (!canvas) {
+      setStatus({ tone: "error", message: "QR image is not ready yet. Try again." })
+      return
+    }
+
+    const imageUrl = canvas.toDataURL("image/png")
+
+    try {
+      const { jsPDF } = await import("jspdf")
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+      const safeEventCode = sessionPayload.eventCode.replace(/[^a-z0-9_-]/gi, "-")
+
+      pdf.setFontSize(14)
+      pdf.text("JA1 Attendance QR", 15, 18)
+      pdf.setFontSize(11)
+      pdf.text(`Event Code: ${sessionPayload.eventCode}`, 15, 28)
+      pdf.text(`Equivalent Code: ${sessionPayload.backupCode}`, 15, 35)
+      pdf.text(`Event: ${sessionPayload.eventName}`, 15, 42)
+      pdf.text(`Place: ${sessionPayload.eventPlace}`, 15, 49)
+      pdf.text(`Date/Time: ${sessionPayload.eventDate} ${sessionPayload.eventTime}`, 15, 56)
+
+      pdf.addImage(imageUrl, "PNG", 15, 66, 70, 70)
+      pdf.save(`${safeEventCode}-attendance-qr.pdf`)
+
+      setStatus({
+        tone: "success",
+        message: `QR PDF downloaded. Equivalent code: ${sessionPayload.backupCode}`,
+      })
+    } catch {
+      setStatus({
+        tone: "error",
+        message: "Failed to generate PDF download.",
+      })
+    }
+  }, [getSessionQrCanvas, sessionPayload])
 
   const startScanner = useCallback(async () => {
     if (isScanning) return
@@ -317,6 +477,12 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
     }
   }, [stopScanner])
 
+  useEffect(() => {
+    if (entryOption === "manual") {
+      manualCodeInputRef.current?.focus()
+    }
+  }, [entryOption])
+
   return (
     <div id="attendance-logging" className="rounded-xl border bg-card p-5">
       <div className="flex flex-col gap-4">
@@ -370,13 +536,23 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
           {sessionPayload ? (
             <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
               <div className="rounded-md border bg-background p-3">
-                <Canvas
-                  text={sessionPayload.qrPayload}
-                  options={{
-                    width: 150,
-                    margin: 2,
-                  }}
-                />
+                <div ref={qrCanvasContainerRef}>
+                  <Canvas
+                    text={sessionPayload.qrPayload}
+                    options={{
+                      width: 150,
+                      margin: 2,
+                    }}
+                  />
+                </div>
+                <div className="mt-3 grid gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={downloadSessionQrAsImage}>
+                    Download Image
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
+                    Download PDF
+                  </Button>
+                </div>
               </div>
               <div className="space-y-1 rounded-md border bg-background p-3 text-sm">
                 <p><span className="font-medium">Event Code:</span> {sessionPayload.eventCode}</p>
@@ -389,32 +565,51 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
           ) : null}
         </div>
 
-        <div>
-          <h3 className="text-lg font-semibold">Member QR Scanner</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Scan member QR, then confirm auto-filled name to complete attendance.
-          </p>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <p className="mb-1 text-sm font-medium">Branch Code</p>
-            <Input value={branchCode} readOnly />
+        {entryOption === "manual" ? (
+          <div className="rounded-lg border bg-muted/20 p-4">
+            <p className="text-sm font-medium">Type Member Equivalent Code</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Type the member code manually (QR token or backup code), then confirm name before submit.
+            </p>
+            <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <p className="mb-1 text-sm font-medium">Member Code</p>
+                <Input
+                  ref={manualCodeInputRef}
+                  value={typedMemberCode}
+                  onChange={(event) => setTypedMemberCode(event.target.value)}
+                  placeholder="e.g. DUM-AB12CD"
+                />
+              </div>
+              <Button type="button" variant="outline" onClick={resolveTypedMemberCode}>
+                Use Typed Code
+              </Button>
+            </div>
           </div>
-          <div>
-            <p className="mb-1 text-sm font-medium">Event Code</p>
-            <Input
-              value={eventCode}
-              readOnly
-              placeholder="Auto-generated with attendance QR"
+        ) : null}
+
+        {entryOption === "scan" ? (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Scanner uses active event code: {eventCode || "Generate attendance QR first"}
+            </p>
+
+            <div
+              id="member-qr-reader"
+              className="min-h-[280px] overflow-hidden rounded-lg border bg-background"
             />
-          </div>
-        </div>
 
-        <div
-          id="member-qr-reader"
-          className="min-h-[280px] overflow-hidden rounded-lg border bg-background"
-        />
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant={isScanning ? "outline" : "default"}
+                onClick={() => void (isScanning ? stopScanner() : startScanner())}
+              >
+                {isScanning ? "Stop Scanner" : "Start Scanner"}
+              </Button>
+            </div>
+          </>
+        ) : null}
 
         {pendingScan ? (
           <div className="rounded-lg border bg-muted/20 p-4">
@@ -452,27 +647,20 @@ export function MemberQrScanner({ branchCode, defaultMemberName }: MemberQrScann
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={startScanner} disabled={isScanning}>
-            Start Scanner
-          </Button>
-          <Button type="button" variant="outline" onClick={() => void stopScanner()} disabled={!isScanning}>
-            Stop Scanner
-          </Button>
-        </div>
-
-        <p
-          className={[
-            "text-sm",
-            status.tone === "error" ? "text-destructive" : "",
-            status.tone === "success" ? "text-emerald-600" : "",
-            status.tone === "loading" ? "text-primary" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          {status.message}
-        </p>
+        {status.message ? (
+          <p
+            className={[
+              "text-sm",
+              status.tone === "error" ? "text-destructive" : "",
+              status.tone === "success" ? "text-emerald-600" : "",
+              status.tone === "loading" ? "text-primary" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {status.message}
+          </p>
+        ) : null}
 
         {lastValue ? (
           <p className="break-all text-xs text-muted-foreground">

@@ -2,7 +2,10 @@ import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
 
 import { authOptions } from "@/lib/server/auth-options"
-import { getMemberNameById } from "@/lib/server/attendance-service"
+import {
+  getMemberNameById,
+  resolveMemberIdByCredentialCode,
+} from "@/lib/server/attendance-service"
 import { hasPermission, PERMISSIONS, type Role } from "@/lib/server/rbac"
 
 export async function GET(request: Request) {
@@ -19,10 +22,19 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  const memberId = url.searchParams.get("memberId")?.trim() ?? ""
+  const directMemberId = url.searchParams.get("memberId")?.trim() ?? ""
+  const memberCode = url.searchParams.get("memberCode")?.trim() ?? ""
+  let memberId = directMemberId
+
+  if (!memberId && memberCode) {
+    memberId = (await resolveMemberIdByCredentialCode(memberCode)) ?? ""
+  }
 
   if (!memberId) {
-    return NextResponse.json({ error: "memberId is required" }, { status: 400 })
+    return NextResponse.json(
+      { error: "memberId or valid memberCode is required" },
+      { status: 400 }
+    )
   }
 
   const memberName = await getMemberNameById(memberId)
@@ -30,6 +42,6 @@ export async function GET(request: Request) {
   return NextResponse.json({
     memberId,
     memberName: memberName ?? session.user.name ?? memberId,
-    autoFilledFrom: memberName ? "member_record" : "session_user",
+    autoFilledFrom: memberCode ? "typed_code" : memberName ? "member_record" : "session_user",
   })
 }

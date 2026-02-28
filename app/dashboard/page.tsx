@@ -11,6 +11,7 @@ import { JourneyInvitationManager } from "@/components/journey-invitation-manage
 import { MemberCredentialIssuer } from "@/components/member-credential-issuer"
 import { MemberMonitorPanel } from "@/components/member-monitor-panel"
 import { MemberQrScanner } from "@/components/member-qr-scanner"
+import { Button } from "@/components/ui/button"
 import { authOptions } from "@/lib/server/auth-options"
 import { getSuperAdminDashboardMetrics } from "@/lib/server/dashboard-metrics"
 import {
@@ -34,12 +35,21 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Keyboard, QrCode } from "lucide-react"
 import { getServerSession } from "next-auth"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
 type DashboardPageProps = {
   searchParams?: Promise<{
     section?: string
+    entry?: "scan" | "manual"
   }>
 }
 
@@ -84,6 +94,10 @@ export default async function Page({ searchParams }: DashboardPageProps) {
 
   const resolvedSearchParams = (await searchParams) ?? {}
   const section = resolvedSearchParams.section ?? "dashboard"
+  const entryMode =
+    resolvedSearchParams.entry === "scan" || resolvedSearchParams.entry === "manual"
+      ? resolvedSearchParams.entry
+      : null
 
   const sectionPermissions: Record<string, boolean> = {
     dashboard: true,
@@ -142,8 +156,8 @@ export default async function Page({ searchParams }: DashboardPageProps) {
         permissions={allowedPermissions}
       />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2">
-          <div className="flex items-center gap-2 px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 justify-between px-4">
+          <div className="flex items-center gap-2">
             <SidebarTrigger className="-ml-1" />
             <Separator
               orientation="vertical"
@@ -165,6 +179,30 @@ export default async function Page({ searchParams }: DashboardPageProps) {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
+
+          {canLogAttendance ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" size="icon" variant="outline" aria-label="Attendance entry options" title="Attendance entry options">
+                  <QrCode className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard?section=attendance-log&entry=scan" className="flex items-center gap-2">
+                    <QrCode className="size-4" />
+                    Scan QR Code
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard?section=attendance-log&entry=manual" className="flex items-center gap-2">
+                    <Keyboard className="size-4" />
+                    Enter Manual Code
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
           {!isAllowedSection ? (
@@ -206,6 +244,7 @@ export default async function Page({ searchParams }: DashboardPageProps) {
             <MemberQrScanner
               branchCode={session.user.branchCode ?? "DUM"}
               defaultMemberName={session.user.name ?? ""}
+              initialEntryOption={entryMode}
             />
           ) : null}
 
