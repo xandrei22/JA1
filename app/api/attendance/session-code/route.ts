@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 
 import { authOptions } from "@/lib/server/auth-options"
 import { createAttendanceSession } from "@/lib/server/attendance-service"
-import { hasPermission, PERMISSIONS, type Role } from "@/lib/server/rbac"
+import { isSupabaseConfigured, selectSupabaseSingle } from "@/lib/server/supabase-admin"
+import { hasPermission, PERMISSIONS, type Role, ROLES } from "@/lib/server/rbac"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -37,6 +38,28 @@ export async function POST(request: Request) {
       { error: "eventName, eventPlace, eventDate, and eventTime are required" },
       { status: 400 }
     )
+  }
+
+  // Enforce branch existence before creating an attendance session
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Branch verification unavailable: supabase not configured" }, { status: 500 })
+  }
+
+  try {
+    const branchRecord = await selectSupabaseSingle("branches", { branch_code: branchCode })
+    if (!branchRecord) {
+      return NextResponse.json({ error: `Branch '${branchCode}' not found. Please register the branch first.` }, { status: 400 })
+    }
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+  }
+
+  // If user is not a super admin, ensure they can only create sessions for their own branch
+  if (role !== ROLES.VIP_CHAIRMAN) {
+    const userBranch = session.user.branchCode
+    if (!userBranch || userBranch !== branchCode) {
+      return NextResponse.json({ error: "Forbidden: you can only create sessions for your own branch" }, { status: 403 })
+    }
   }
 
   const result = await createAttendanceSession({

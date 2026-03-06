@@ -98,32 +98,7 @@ export default function Home() {
             </div>
         </section>
 
-        <section className="w-full bg-white py-14">
-          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                JA1 + System Overview
-              </h2>
-              <p className="mt-3 text-lg text-muted-foreground">
-                The homepage now focuses on both ministry identity and the platform purpose.
-              </p>
-            </div>
-
-            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {highlights.map(({ title, description, icon: Icon }) => (
-                <div key={title} className="rounded-xl border border-primary/40 bg-card p-6 text-center shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl">
-                  <div className="mx-auto mb-4 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
-                    <Icon className="size-5" />
-                  </div>
-                  <h3 className="text-2xl font-semibold leading-tight">{title}</h3>
-                  <p className="mt-3 text-lg text-muted-foreground">{description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="founder-section" className="w-full bg-zinc-100 py-10">
+        <section id="founder-section" className="w-full bg-white py-14">
           <div className="mx-auto grid min-h-[50vh] w-full max-w-6xl gap-6 px-4 md:grid-cols-2 md:items-stretch sm:px-6 lg:px-8">
             <div className="flex flex-col justify-center">
               <h2 className="text-3xl font-bold tracking-tight">Who Is the Founder</h2>
@@ -146,6 +121,31 @@ export default function Home() {
                 <CarouselPrevious className="left-2 size-7" />
                 <CarouselNext className="right-2 size-7" />
               </Carousel>
+            </div>
+          </div>
+        </section>
+
+        <section className="w-full bg-zinc-100 py-10">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                JA1 + System Overview
+              </h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                The homepage now focuses on both ministry identity and the platform purpose.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {highlights.map(({ title, description, icon: Icon }) => (
+                <div key={title} className="rounded-xl border border-primary/40 bg-card p-6 text-center shadow-lg transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl">
+                  <div className="mx-auto mb-4 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="text-2xl font-semibold leading-tight">{title}</h3>
+                  <p className="mt-3 text-lg text-muted-foreground">{description}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>

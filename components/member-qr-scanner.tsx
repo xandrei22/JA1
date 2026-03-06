@@ -39,6 +39,7 @@ type PendingScan = {
   sourceCode: string
   memberName: string
   method: "qr" | "manual"
+  loggedAt?: string
 }
 
 export function MemberQrScanner({
@@ -57,6 +58,10 @@ export function MemberQrScanner({
 
   const [eventName, setEventName] = useState("Sunday Service")
   const [eventPlace, setEventPlace] = useState(branchCode)
+  const [selectedBranch, setSelectedBranch] = useState(branchCode)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userBranch, setUserBranch] = useState<string | null>(null)
+  const [availableBranches, setAvailableBranches] = useState<{ branchCode: string; name: string }[]>([])
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10))
   const [eventTime, setEventTime] = useState("09:00")
   const [eventCode, setEventCode] = useState("")
@@ -91,7 +96,7 @@ export function MemberQrScanner({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        branchCode,
+        branchCode: selectedBranch || branchCode,
         eventName: eventName.trim(),
         eventPlace: eventPlace.trim(),
         eventDate: eventDate.trim(),
@@ -122,6 +127,50 @@ export function MemberQrScanner({
     })
   }, [branchCode, eventDate, eventName, eventPlace, eventTime])
 
+  // load current user role and branch; if super admin, load branches for selection
+  useEffect(() => {
+    let mounted = true
+
+    async function load() {
+      try {
+        const res = await fetch("/api/me")
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        const user = json?.user
+        setUserRole(user?.role ?? null)
+        setUserBranch(user?.branchCode ?? null)
+        if (user?.role === "vip_chairman") {
+          try {
+            const bres = await fetch("/api/branch")
+            const bjson = await bres.json()
+            setAvailableBranches((bjson.records ?? []).map((r: any) => ({ branchCode: r.branchCode, name: r.name })))
+          } catch {
+            setAvailableBranches([])
+          }
+        }
+      } catch {
+        // noop
+      }
+    }
+
+    void load()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    // keep selectedBranch in sync with incoming prop or user branch
+    if (userRole === "vip_chairman") {
+      // super admin may choose; keep prop as fallback
+      setSelectedBranch((prev) => prev || branchCode)
+    } else {
+      setSelectedBranch(userBranch ?? branchCode)
+    }
+  }, [userRole, userBranch, branchCode])
+
   const stopScanner = useCallback(async () => {
     if (!scannerRef.current) return
 
@@ -145,10 +194,14 @@ export function MemberQrScanner({
     async (decodedText: string) => {
       let memberId = ""
 
+      let issuedAt: string | undefined = undefined
       try {
         const parsed = JSON.parse(decodedText) as QrPayload
         if (typeof parsed.memberId === "string") {
           memberId = parsed.memberId
+        }
+        if (typeof parsed.issuedAt === "string") {
+          issuedAt = parsed.issuedAt
         }
       } catch {
         // noop
@@ -185,6 +238,7 @@ export function MemberQrScanner({
         memberId,
         sourceCode: decodedText,
         memberName: payload.memberName?.trim() || defaultMemberName || memberId,
+        loggedAt: issuedAt,
         method: "qr",
       })
 
@@ -240,6 +294,7 @@ export function MemberQrScanner({
         branchCode,
         method: pendingScan.method,
         sourceCode: pendingScan.sourceCode,
+        loggedAt: pendingScan.loggedAt ?? new Date().toISOString(),
       }),
     })
 
@@ -305,6 +360,7 @@ export function MemberQrScanner({
       memberId: payload.memberId,
       sourceCode: normalizedCode,
       memberName: payload.memberName?.trim() || defaultMemberName || payload.memberId,
+      loggedAt: new Date().toISOString(),
       method: "manual",
     })
 
@@ -503,11 +559,29 @@ export function MemberQrScanner({
             </div>
             <div>
               <p className="mb-1 text-sm font-medium">Place</p>
-              <Input
-                value={eventPlace}
-                onChange={(event) => setEventPlace(event.target.value)}
-                placeholder="e.g. JA1 Main Hall"
-              />
+              {userRole === "vip_chairman" ? (
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => {
+                    setSelectedBranch(e.target.value)
+                    setEventPlace(e.target.value)
+                  }}
+                  className="w-full rounded-md border px-2 py-2"
+                >
+                  <option value="">Select branch</option>
+                  {availableBranches.map((b) => (
+                    <option key={b.branchCode} value={b.branchCode}>
+                      {b.name} ({b.branchCode})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  value={eventPlace}
+                  onChange={(event) => setEventPlace(event.target.value)}
+                  placeholder="e.g. JA1 Main Hall"
+                />
+              )}
             </div>
             <div>
               <p className="mb-1 text-sm font-medium">Date</p>

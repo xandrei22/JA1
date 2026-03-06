@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     branchCode?: string
     method?: "qr" | "manual"
     sourceCode?: string
+    loggedAt?: string
   }
 
   let memberId = body.memberId?.trim() ?? ""
@@ -75,12 +76,7 @@ export async function POST(request: Request) {
   const eventCode = body.eventCode?.trim() ?? ""
   const sourceCode = body.sourceCode?.trim() ?? ""
 
-  if (
-    !memberId ||
-    !eventCode ||
-    !body.method ||
-    !sourceCode
-  ) {
+  if (!memberId || !eventCode || !body.method || !sourceCode) {
     return NextResponse.json(
       { error: "memberId, eventCode, method, and sourceCode are required" },
       { status: 400 }
@@ -110,6 +106,7 @@ export async function POST(request: Request) {
     method: body.method,
     sourceCode,
     loggedByUserId: session.user.id,
+    loggedAt: body.loggedAt,
   })
 
   return NextResponse.json({

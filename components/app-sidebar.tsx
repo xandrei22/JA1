@@ -90,6 +90,7 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             items: [
               { title: "Manage Members", url: "/dashboard?section=member-management" },
               { title: "Reset Credentials", url: "/dashboard?section=member-management" },
+              ...(hasPermission(permissions, "first_timers:view") ? [{ title: "First Timers", url: "/dashboard?section=first-timers-view" }] : []),
             ],
           },
         ]
@@ -114,17 +115,6 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
               ...(hasPermission(permissions, "branch:manage") ? [{ title: "Manage Branches", url: "/dashboard?section=branch-management" }] : []),
               ...(hasPermission(permissions, "satellite:view") ? [{ title: "Satellite Centers", url: "/dashboard?section=satellite-view" }] : []),
               ...(hasPermission(permissions, "first_timers:view") ? [{ title: "First Timers", url: "/dashboard?section=first-timers-view" }] : []),
-            ],
-          },
-        ]
-      : []),
-    ...(hasPermission(permissions, "branch:recognition_request") || hasPermission(permissions, "branch:approve")
-      ? [
-          {
-            title: "Governance",
-            url: "#",
-            icon: Building2,
-            items: [
               ...(hasPermission(permissions, "branch:recognition_request")
                 ? [{ title: "Branch Recognition", url: "/dashboard?section=branch-recognition" }]
                 : []),
@@ -135,6 +125,7 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
           },
         ]
       : []),
+    
     ...(hasPermission(permissions, "announcement:view") || hasPermission(permissions, "announcement:manage")
       ? [
           {
@@ -147,19 +138,7 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
           },
         ]
       : []),
-    ...(hasPermission(permissions, "settings:manage") || hasPermission(permissions, "system:manage")
-      ? [
-          {
-            title: "Administration",
-            url: "#",
-            icon: Settings2,
-            items: [
-              ...(hasPermission(permissions, "settings:manage") ? [{ title: "Settings", url: "/dashboard?section=settings" }] : []),
-              ...(hasPermission(permissions, "system:manage") ? [{ title: "System Controls", url: "/dashboard?section=system-controls" }] : []),
-            ],
-          },
-        ]
-      : []),
+    // Administration items moved: `Settings` moved to user menu; `System Controls` accessible from Settings page
     ...(hasPermission(permissions, "journey:access") || hasPermission(permissions, "journey:invite")
       ? [
           {

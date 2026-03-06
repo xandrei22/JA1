@@ -1,14 +1,8 @@
 "use client"
 
 import { signOut } from "next-auth/react"
-import {
-  BadgeCheck,
-  Bell,
-  ChevronsUpDown,
-  CreditCard,
-  LogOut,
-  Sparkles,
-} from "lucide-react"
+import { Bell, ChevronsUpDown, LogOut, Settings2 } from "lucide-react"
+import Link from "next/link"
 
 import {
   Avatar,
@@ -86,20 +80,11 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Sparkles />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheck />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCard />
-                Billing
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard?section=settings">
+                  <Settings2 />
+                  Settings
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Bell />

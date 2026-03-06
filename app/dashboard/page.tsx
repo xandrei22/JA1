@@ -307,6 +307,13 @@ export default async function Page({ searchParams }: DashboardPageProps) {
               <p className="mt-2 text-sm text-muted-foreground">
                 System settings management module is enabled for your role.
               </p>
+              {canManageSystem ? (
+                <div className="mt-4">
+                  <Button size="sm" asChild>
+                    <Link href="/dashboard?section=system-controls">Open System Controls</Link>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -334,23 +341,7 @@ export default async function Page({ searchParams }: DashboardPageProps) {
             <JourneyInvitationManager />
           ) : null}
 
-          <div className="rounded-xl border bg-card p-5">
-            <h3 className="font-semibold">Your Access Summary</h3>
-            <div className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-              <p>
-                <span className="font-medium text-foreground">Role:</span> {session.user.role}
-              </p>
-              <p>
-                <span className="font-medium text-foreground">Branch:</span> {session.user.branchCode ?? "N/A"}
-              </p>
-              <p>
-                <span className="font-medium text-foreground">Age Group:</span> {session.user.ageGroup ?? "N/A"}
-              </p>
-              <p>
-                <span className="font-medium text-foreground">Permissions:</span> {allowedPermissions.length}
-              </p>
-            </div>
-          </div>
+          {/* Access Summary removed per request */}
         </div>
       </SidebarInset>
     </SidebarProvider>

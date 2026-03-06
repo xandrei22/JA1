@@ -29,6 +29,7 @@ export type AttendanceLogInput = {
   method: AttendanceMethod
   sourceCode: string
   loggedByUserId: string
+  loggedAt?: string
 }
 
 export type AttendanceLogRecord = {
@@ -114,7 +115,18 @@ export async function issueMemberCredential(
 }
 
 export async function logAttendance(input: AttendanceLogInput) {
-  const loggedAt = new Date().toISOString()
+  // Prefer a provided timestamp when valid, otherwise use server time
+  let loggedAt = new Date().toISOString()
+  if (input.loggedAt) {
+    try {
+      const parsed = new Date(input.loggedAt)
+      if (!Number.isNaN(parsed.getTime())) {
+        loggedAt = parsed.toISOString()
+      }
+    } catch {
+      // ignore and keep server timestamp
+    }
+  }
 
   if (isSupabaseConfigured()) {
     const inserted = await insertSupabaseRow("attendance_logs", {
