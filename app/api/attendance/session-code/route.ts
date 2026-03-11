@@ -15,7 +15,9 @@ export async function POST(request: Request) {
 
   const role = (session.user.role ?? "") as Role
 
-  if (!hasPermission(role, PERMISSIONS.ATTENDANCE_LOG)) {
+  // Only VIP chairman (super admin) and supervising pastor (admin) may generate
+  // attendance session QR codes.
+  if (role !== ROLES.VIP_CHAIRMAN && role !== ROLES.SUPERVISING_PASTOR) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

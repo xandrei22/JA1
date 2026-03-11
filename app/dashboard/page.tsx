@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Keyboard, QrCode } from "lucide-react"
+import { AttendanceEntryTrigger } from "@/components/attendance-entry-trigger"
 import { getServerSession } from "next-auth"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -181,27 +182,8 @@ export default async function Page({ searchParams }: DashboardPageProps) {
           </div>
 
           {canLogAttendance ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" size="icon" variant="outline" aria-label="Attendance entry options" title="Attendance entry options">
-                  <QrCode className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard?section=attendance-log&entry=scan" className="flex items-center gap-2">
-                    <QrCode className="size-4" />
-                    Scan QR Code
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard?section=attendance-log&entry=manual" className="flex items-center gap-2">
-                    <Keyboard className="size-4" />
-                    Enter Manual Code
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            // client trigger opens scanner modal directly when selected
+            <AttendanceEntryTrigger />
           ) : null}
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

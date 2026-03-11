@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 type CredentialResponse = {
   memberId: string
@@ -19,6 +19,34 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState("Issue a new QR + backup credential for a member.")
   const [credential, setCredential] = useState<CredentialResponse | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function load() {
+      try {
+        const res = await fetch("/api/me")
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        setUserRole(json?.user?.role ?? null)
+      } catch {
+        // noop
+      }
+    }
+
+    void load()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const canIssue = userRole === "vip_chairman" || userRole === "supervising_pastor"
+
+  // Hide this component entirely for users who are not allowed to issue credentials.
+  if (!canIssue) return null
 
   async function handleIssueCredential() {
     const normalizedMemberId = memberId.trim()
@@ -81,9 +109,12 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
       </div>
 
       <div className="mt-4">
-        <Button type="button" onClick={handleIssueCredential} disabled={isLoading}>
+        <Button type="button" onClick={handleIssueCredential} disabled={isLoading || !canIssue}>
           {isLoading ? "Generating..." : "Issue Credential"}
         </Button>
+        {!canIssue ? (
+          <p className="mt-2 text-xs text-muted-foreground">Only VIP chairman or Supervising Pastor may issue credentials.</p>
+        ) : null}
       </div>
 
       <p className="mt-3 text-sm text-muted-foreground">{message}</p>

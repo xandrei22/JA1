@@ -170,10 +170,116 @@ export async function logAttendance(input: AttendanceLogInput) {
 export async function listAttendanceLogs(input: {
   branchCode: string
   limit?: number
+  startDate?: string
+  endDate?: string
+  eventQuery?: string
 }) {
   const limit = Math.max(1, Math.min(input.limit ?? 20, 100))
 
   if (isSupabaseConfigured()) {
+    // build supabase REST query with operators for range and ilike
+    const params = new URLSearchParams({
+      select: "*",
+      limit: String(limit),
+      order: "logged_at.desc",
+    })
+
+    // branch filter
+    params.set("branch_code", `eq.${input.branchCode}`)
+
+    // event query (case-insensitive)
+    if (input.eventQuery && input.eventQuery.trim()) {
+      params.set("event_code", `ilike.*${input.eventQuery.trim()}*`)
+    }
+
+    // date range filters (expect YYYY-MM-DD)
+    if (input.startDate) {
+      const start = `${input.startDate}T00:00:00Z`
+      params.set("logged_at", `gte.${start}`)
+    }
+    if (input.endDate) {
+      const end = `${input.endDate}T23:59:59Z`
+      // if logged_at already has a gte filter, we append lte as additional param by using 'logged_at=gte.xxx&logged_at=lte.yyy'
+      // URLSearchParams will overwrite, so add as another key by using append
+      params.append("logged_at", `lte.${end}`)
+    }
+
+    const response = await fetch(`${endpoint("attendance_logs")}?${params.toString()}`, {
+      method: "GET",
+      headers: getHeaders(),
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      const details = await response.text()
+      throw new Error(`Supabase select failed (${response.status}): ${details}`)
+    }
+
+    const rows = (await response.json()) as any[]
+
+    return {
+      persisted: true,
+      records: rows.map((row) => ({
+        memberId: row.member_id,
+        eventCode: row.event_code,
+        branchCode: row.branch_code,
+        method: row.method,
+        sourceCode: row.source_code,
+        loggedByUserId: row.logged_by_user_id,
+        loggedAt: row.logged_at,
+      })),
+    }
+  }
+
+  let records = inMemoryAttendanceLogs.filter((record) => record.branchCode === input.branchCode)
+
+  if (input.eventQuery && input.eventQuery.trim()) {
+    const q = input.eventQuery.trim().toLowerCase()
+    records = records.filter((r) => r.eventCode.toLowerCase().includes(q))
+  }
+
+  if (input.startDate) {
+    const s = new Date(`${input.startDate}T00:00:00Z`).getTime()
+    records = records.filter((r) => new Date(r.loggedAt).getTime() >= s)
+  }
+  if (input.endDate) {
+    const e = new Date(`${input.endDate}T23:59:59Z`).getTime()
+    records = records.filter((r) => new Date(r.loggedAt).getTime() <= e)
+  }
+
+  records = records.sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime()).slice(0, limit)
+
+  return {
+    persisted: false,
+    records,
+  }
+}
+
+export async function listMemberAttendanceLogs(input: { memberId: string; limit?: number }) {
+  const limit = Math.max(1, Math.min(input.limit ?? 20, 100))
+
+  if (isSupabaseConfigured()) {
+    // Accept either a UUID member id or a member_no (legacy numeric/member number).
+    let memberIdToUse = input.memberId
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(memberIdToUse)) {
+      // try resolving via member_no
+      const memberRow = await selectSupabaseSingle<{ id: string }>("members", {
+        member_no: memberIdToUse,
+      })
+
+      if (memberRow?.id) {
+        memberIdToUse = memberRow.id
+      } else {
+        // No matching member found — return empty set
+        return {
+          persisted: true,
+          records: [],
+        }
+      }
+    }
+
     const rows = await selectSupabaseRows<{
       member_id: string
       event_code: string
@@ -184,7 +290,7 @@ export async function listAttendanceLogs(input: {
       logged_at: string
     }>({
       table: "attendance_logs",
-      filters: { branch_code: input.branchCode },
+      filters: { member_id: memberIdToUse },
       limit,
       orderBy: "logged_at",
       ascending: false,
@@ -205,7 +311,7 @@ export async function listAttendanceLogs(input: {
   }
 
   const records = inMemoryAttendanceLogs
-    .filter((record) => record.branchCode === input.branchCode)
+    .filter((record) => record.memberId === input.memberId)
     .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())
     .slice(0, limit)
 
@@ -373,4 +479,58 @@ export async function createAttendanceSession(
   inMemoryAttendanceSessions.push(session)
 
   return session
+}
+
+export async function getLatestAttendanceSession(branchCode: string): Promise<AttendanceSessionResult | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      const branch = await selectSupabaseSingle<SupabaseBranchRow>("branches", {
+        branch_code: branchCode,
+      })
+
+      if (branch?.id) {
+        const rows = await selectSupabaseRows<{
+          event_code: string
+          title: string
+          starts_at: string
+        }>({
+          table: "events",
+          filters: { branch_id: branch.id },
+          limit: 1,
+          orderBy: "starts_at",
+          ascending: false,
+        })
+
+        const ev = rows[0]
+        if (!ev) return null
+
+        // starts_at expected like ISO 'YYYY-MM-DDTHH:MM:SSZ'
+        const [datePart, timePart] = (ev.starts_at ?? "").split("T")
+        const time = (timePart ?? "").replace("Z", "").slice(0, 5)
+
+        return {
+          branchCode,
+          eventCode: ev.event_code,
+          eventName: ev.title,
+          eventPlace: branchCode,
+          eventDate: datePart ?? "",
+          eventTime: time ?? "",
+          backupCode: "",
+          qrPayload: "",
+          generatedAt: new Date().toISOString(),
+          persisted: true,
+        }
+      }
+    } catch {
+      // fall through to in-memory check
+    }
+  }
+
+  // fallback to in-memory sessions
+  for (let i = inMemoryAttendanceSessions.length - 1; i >= 0; i--) {
+    const s = inMemoryAttendanceSessions[i]
+    if (s.branchCode === branchCode) return s
+  }
+
+  return null
 }

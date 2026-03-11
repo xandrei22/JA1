@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { ChevronRight, type LucideIcon } from "lucide-react"
 
 import {
@@ -37,41 +38,50 @@ export function NavMain({
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => (
-          <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={item.title}>
-                <a href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </a>
-              </SidebarMenuButton>
-              {item.items?.length ? (
-                <>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuAction className="data-[state=open]:rotate-90">
-                      <ChevronRight />
-                      <span className="sr-only">Toggle</span>
-                    </SidebarMenuAction>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {item.items?.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild>
-                            <a href={subItem.url}>
-                              <span>{subItem.title}</span>
-                            </a>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </>
-              ) : null}
-            </SidebarMenuItem>
-          </Collapsible>
-        ))}
+        {items.map((item, idx) => {
+          // use deterministic id derived from title + index to avoid React.useId hydration mismatch
+          const slug = String(item.title)
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9\-]/g, "")
+          const contentId = `nav-${slug}-${idx}-cm`
+
+          return (
+            <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip={item.title}>
+                  <a href={item.url}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </a>
+                </SidebarMenuButton>
+                {item.items?.length ? (
+                  <>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuAction aria-controls={contentId} className="data-[state=open]:rotate-90">
+                        <ChevronRight />
+                        <span className="sr-only">Toggle</span>
+                      </SidebarMenuAction>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent id={contentId}>
+                      <SidebarMenuSub>
+                        {item.items?.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.title}>
+                            <SidebarMenuSubButton asChild>
+                              <a href={subItem.url}>
+                                <span>{subItem.title}</span>
+                              </a>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </>
+                ) : null}
+              </SidebarMenuItem>
+            </Collapsible>
+          )
+        })}
       </SidebarMenu>
     </SidebarGroup>
   )

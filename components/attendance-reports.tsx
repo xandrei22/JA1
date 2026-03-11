@@ -16,16 +16,21 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [eventFilter, setEventFilter] = useState("")
+  const [startDate, setStartDate] = useState<string | null>(null)
+  const [endDate, setEndDate] = useState<string | null>(null)
   const [message, setMessage] = useState("Load recent attendance logs.")
 
   const loadRecords = useCallback(async () => {
     setIsLoading(true)
     setMessage("Loading attendance logs...")
-
     const params = new URLSearchParams({
       branchCode,
-      limit: "30",
+      limit: "100",
     })
+
+    if (eventFilter.trim()) params.set("event", eventFilter.trim())
+    if (startDate) params.set("start", startDate)
+    if (endDate) params.set("end", endDate)
 
     const response = await fetch(`/api/attendance/log?${params.toString()}`, {
       method: "GET",
@@ -49,6 +54,38 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
       payload.note ?? `Loaded ${(payload.records ?? []).length} attendance logs.`
     )
   }, [branchCode])
+
+  const downloadCsv = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const params = new URLSearchParams({ branchCode, limit: "10000", export: "csv" })
+      if (eventFilter.trim()) params.set("event", eventFilter.trim())
+      if (startDate) params.set("start", startDate)
+      if (endDate) params.set("end", endDate)
+
+      const res = await fetch(`/api/attendance/log?${params.toString()}`)
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "Failed to download")
+        setMessage(txt)
+        return
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `attendance-${branchCode}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setMessage("CSV download started.")
+    } catch (err: any) {
+      setMessage(err?.message ?? "Failed to download CSV")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [branchCode, eventFilter, startDate, endDate])
 
   const filtered = records.filter((record) =>
     eventFilter.trim()
@@ -83,9 +120,31 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
             placeholder="e.g. SUNDAY-SERVICE"
           />
         </div>
+        <div>
+          <p className="mb-1 text-sm font-medium">Start Date</p>
+          <Input type="date" value={startDate ?? ""} onChange={(e) => setStartDate(e.target.value || null)} />
+        </div>
+        <div>
+          <p className="mb-1 text-sm font-medium">End Date</p>
+          <Input type="date" value={endDate ?? ""} onChange={(e) => setEndDate(e.target.value || null)} />
+        </div>
       </div>
 
       <p className="mt-4 text-sm text-muted-foreground">{message}</p>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={loadRecords} disabled={isLoading}>
+            {isLoading ? "Loading..." : "Refresh Logs"}
+          </Button>
+          <Button type="button" onClick={downloadCsv} disabled={isLoading}>
+            Download CSV
+          </Button>
+        </div>
+        <div className="ml-auto">
+          <Input placeholder="Search events..." value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} />
+        </div>
+      </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border">
         <table className="w-full text-left text-sm">

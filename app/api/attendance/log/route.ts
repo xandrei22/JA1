@@ -27,10 +27,43 @@ export async function GET(request: Request) {
   const branchCode =
     url.searchParams.get("branchCode")?.trim() || session.user.branchCode || "DUM"
 
-  const result = await listAttendanceLogs({
+  const startDate = url.searchParams.get("start") ?? undefined
+  const endDate = url.searchParams.get("end") ?? undefined
+  const eventQuery = url.searchParams.get("event") ?? undefined
+  const exportFormat = url.searchParams.get("export") ?? undefined
+
+  const opts = {
     branchCode,
     limit: Number.isFinite(limitParam) ? limitParam : 20,
-  })
+    startDate,
+    endDate,
+    eventQuery,
+  }
+
+  const result = await listAttendanceLogs(opts)
+
+  if (exportFormat === "csv") {
+    // build CSV string
+    const rows = result.records ?? []
+    const header = ["memberId", "eventCode", "branchCode", "method", "loggedAt"]
+    const csvLines = [header.join(",")]
+    for (const r of rows) {
+      const line = [r.memberId, r.eventCode, r.branchCode, r.method, r.loggedAt]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(",")
+      csvLines.push(line)
+    }
+
+    const csv = csvLines.join("\n")
+
+    return new NextResponse(csv, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv",
+        "Content-Disposition": `attachment; filename="attendance-${branchCode}.csv"`,
+      },
+    })
+  }
 
   return NextResponse.json(result)
 }

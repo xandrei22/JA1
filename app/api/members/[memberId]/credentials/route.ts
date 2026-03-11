@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 import { authOptions } from "@/lib/server/auth-options"
 import { issueMemberCredential } from "@/lib/server/attendance-service"
-import { hasPermission, PERMISSIONS, type Role } from "@/lib/server/rbac"
+import { hasPermission, PERMISSIONS, type Role, ROLES } from "@/lib/server/rbac"
 
 type Params = {
   params: Promise<{
@@ -20,7 +20,9 @@ export async function POST(request: Request, { params }: Params) {
 
   const role = (session.user.role ?? "") as Role
 
-  if (!hasPermission(role, PERMISSIONS.MEMBER_MANAGE)) {
+  // Only VIP chairman (super admin) and supervising pastor (admin) may issue
+  // member QR credentials.
+  if (role !== ROLES.VIP_CHAIRMAN && role !== ROLES.SUPERVISING_PASTOR) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

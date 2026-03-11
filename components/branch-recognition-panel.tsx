@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import PhilAddressAutocomplete from "@/components/phil-address-autocomplete"
 import { useCallback, useState } from "react"
 
 type BranchRecognitionRequest = {
@@ -24,6 +25,7 @@ export function BranchRecognitionPanel({
   const [activeBranch, setActiveBranch] = useState(branchCode)
   const [branchName, setBranchName] = useState(`JA1 ${branchCode.toUpperCase()}`)
   const [note, setNote] = useState("")
+  const [address, setAddress] = useState<{ address?: string; zip?: string }>({})
   const [message, setMessage] = useState(
     canApproveBranches
       ? "VIP can directly create and approve branch recognition."
@@ -67,6 +69,8 @@ export function BranchRecognitionPanel({
         branchCode: activeBranch.trim() || branchCode,
         branchName: branchName.trim() || `JA1 ${(activeBranch.trim() || branchCode).toUpperCase()}`,
         note: note.trim(),
+        address: address.address?.trim() ?? "",
+        zip: address.zip ?? "",
       }),
     })
 
@@ -115,6 +119,23 @@ export function BranchRecognitionPanel({
         <div>
           <p className="mb-1 text-sm font-medium">Recognition Note</p>
           <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why this branch is ready for recognition" />
+        </div>
+      </div>
+      
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div>
+          <p className="mb-1 text-sm font-medium">Branch Address</p>
+          {/* dynamically imported phil-address autocomplete */}
+          <PhilAddressAutocomplete
+            value={address}
+            onChange={(v) => setAddress(v)}
+            placeholder="Start typing street, city..."
+            alwaysShowStructured
+          />
+        </div>
+        <div>
+          <p className="mb-1 text-sm font-medium">ZIP / Postal Code</p>
+          <Input value={address.zip ?? ""} onChange={(e) => setAddress((p) => ({ ...p, zip: e.target.value }))} />
         </div>
       </div>
 

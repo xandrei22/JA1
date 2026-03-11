@@ -2,8 +2,15 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { MemberAttendanceHistory } from "@/components/member-attendance-history"
 import { useQRCode } from "next-qrcode"
 import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 
 type MemberQrScannerProps = {
   branchCode: string
@@ -70,13 +77,56 @@ export function MemberQrScanner({
   const [isGeneratingSession, setIsGeneratingSession] = useState(false)
   const [isConfirmingName, setIsConfirmingName] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
-  const [entryOption] = useState<"scan" | "manual" | null>(initialEntryOption)
+  const [manualOpen, setManualOpen] = useState<boolean>(initialEntryOption === "manual")
   const [typedMemberCode, setTypedMemberCode] = useState("")
   const [lastValue, setLastValue] = useState("")
   const [status, setStatus] = useState<ScanStatus>({
     tone: "idle",
     message: "",
   })
+
+  const [scannerOpen, setScannerOpen] = useState<boolean>(initialEntryOption === "scan")
+
+  // respond to server-provided initial entry option updates (e.g. ?entry=manual)
+  useEffect(() => {
+    if (initialEntryOption === "manual") {
+      setManualOpen(true)
+    } else if (initialEntryOption === "scan") {
+      setScannerOpen(true)
+    }
+  }, [initialEntryOption])
+
+  const canGenerateSession = userRole === "vip_chairman" || userRole === "supervising_pastor"
+
+  useEffect(() => {
+    function onOpenScanner() {
+      setScannerOpen(true)
+    }
+
+    function onOpenManual() {
+      setManualOpen(true)
+      // focus input when opened via event
+      setTimeout(() => manualCodeInputRef.current?.focus(), 50)
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("ja1:open-scanner", onOpenScanner as EventListener)
+      window.addEventListener("ja1:open-manual", onOpenManual as EventListener)
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("ja1:open-scanner", onOpenScanner as EventListener)
+        window.removeEventListener("ja1:open-manual", onOpenManual as EventListener)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (scannerOpen) {
+      setStatus({ tone: "idle", message: "Scanner ready. Start camera to scan." })
+    }
+  }, [scannerOpen])
 
   const generateSessionCode = useCallback(async () => {
     if (!eventName.trim() || !eventPlace.trim() || !eventDate.trim() || !eventTime.trim()) {
@@ -161,6 +211,38 @@ export function MemberQrScanner({
     }
   }, [])
 
+  // attempt to load any active attendance session for this branch so non-generator
+  // roles can scan or use manual codes against an existing session.
+  useEffect(() => {
+    let mounted = true
+
+    async function loadCurrent() {
+      try {
+        const res = await fetch(`/api/attendance/current-session?branchCode=${encodeURIComponent(selectedBranch || branchCode)}`)
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        if (json?.found && json?.session) {
+          setSessionPayload(json.session)
+          setEventCode(json.session.eventCode)
+        }
+      } catch {
+        // noop
+      }
+    }
+
+    void loadCurrent()
+
+    return () => {
+      mounted = false
+    }
+  }, [selectedBranch, branchCode])
+
+  // NOTE: polling removed — the component attempts one immediate fetch
+  // for a current session on mount. Users without generator rights should
+  // ask VIP/Admin to create a session; attempting to start the scanner
+  // without an active session will show a validation message.
+
   useEffect(() => {
     // keep selectedBranch in sync with incoming prop or user branch
     if (userRole === "vip_chairman") {
@@ -192,45 +274,73 @@ export function MemberQrScanner({
 
   const handleDecodedScan = useCallback(
     async (decodedText: string) => {
-      let memberId = ""
-
-      let issuedAt: string | undefined = undefined
+      // Attempt to parse payload. There are two QR types:
+      // - member credential: { memberId, token, issuedAt }
+      // - attendance session: { type: 'attendance_session', eventCode, branchCode, ... }
+      let parsed: any = null
       try {
-        const parsed = JSON.parse(decodedText) as QrPayload
-        if (typeof parsed.memberId === "string") {
-          memberId = parsed.memberId
-        }
-        if (typeof parsed.issuedAt === "string") {
-          issuedAt = parsed.issuedAt
-        }
+        parsed = JSON.parse(decodedText)
       } catch {
-        // noop
+        parsed = null
       }
 
-      if (!memberId) {
-        setStatus({
-          tone: "error",
-          message: "Invalid member QR payload. Expected memberId.",
-        })
+      if (parsed && parsed.type === "attendance_session" && parsed.eventCode) {
+        // validate that this session was created/persisted by an admin
+        setStatus({ tone: "loading", message: "Validating session QR..." })
+        try {
+          const res = await fetch(
+            `/api/attendance/validate-session?eventCode=${encodeURIComponent(parsed.eventCode)}&branchCode=${encodeURIComponent(parsed.branchCode ?? selectedBranch ?? branchCode)}`
+          )
+          const v = await res.json().catch(() => ({}))
+          if (!res.ok || !v?.valid) {
+            setStatus({ tone: "error", message: "Unrecognized session QR. Only admin-generated QRs are accepted." })
+            return
+          }
+
+          // accepted session — set as active session
+          setSessionPayload({
+            branchCode: parsed.branchCode ?? selectedBranch ?? branchCode,
+            eventCode: parsed.eventCode,
+            eventName: parsed.eventName ?? "",
+            eventPlace: parsed.eventPlace ?? "",
+            eventDate: parsed.eventDate ?? "",
+            eventTime: parsed.eventTime ?? "",
+            backupCode: parsed.equivalentCode ?? "",
+            qrPayload: decodedText,
+            generatedAt: parsed.issuedAt ?? new Date().toISOString(),
+          })
+          setEventCode(parsed.eventCode)
+          setStatus({ tone: "success", message: `Loaded attendance session: ${parsed.eventCode}` })
+        } catch {
+          setStatus({ tone: "error", message: "Failed to validate session QR." })
+        }
+
         return
       }
 
-      setStatus({ tone: "loading", message: "Loading member name..." })
+      // member credential flow (token or backup code or JSON memberId)
+      let memberId = ""
+      let issuedAt: string | undefined = undefined
+      if (parsed && typeof parsed.memberId === "string") {
+        memberId = parsed.memberId
+        if (typeof parsed.issuedAt === "string") issuedAt = parsed.issuedAt
+      }
 
-      const response = await fetch(
-        `/api/attendance/member-info?memberId=${encodeURIComponent(memberId)}`
-      )
+      if (!memberId) {
+        setStatus({ tone: "error", message: "Invalid member QR payload. Expected memberId." })
+        return
+      }
 
+      setStatus({ tone: "loading", message: "Resolving member..." })
+
+      const response = await fetch(`/api/attendance/member-info?memberId=${encodeURIComponent(memberId)}`)
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
         memberName?: string
       }
 
       if (!response.ok) {
-        setStatus({
-          tone: "error",
-          message: payload.error ?? "Failed to resolve member name.",
-        })
+        setStatus({ tone: "error", message: payload.error ?? "Failed to resolve member name." })
         return
       }
 
@@ -242,10 +352,7 @@ export function MemberQrScanner({
         method: "qr",
       })
 
-      setStatus({
-        tone: "idle",
-        message: "Confirm the auto-filled name before submitting attendance.",
-      })
+      setStatus({ tone: "idle", message: "Confirm the auto-filled name before submitting attendance." })
 
       await stopScanner()
     },
@@ -478,14 +585,6 @@ export function MemberQrScanner({
   const startScanner = useCallback(async () => {
     if (isScanning) return
 
-    if (!sessionPayload || !eventCode.trim()) {
-      setStatus({
-        tone: "error",
-        message: "Generate attendance QR first. Event code is created together with QR.",
-      })
-      return
-    }
-
     setStatus({ tone: "loading", message: "Starting camera..." })
 
     try {
@@ -534,118 +633,138 @@ export function MemberQrScanner({
   }, [stopScanner])
 
   useEffect(() => {
-    if (entryOption === "manual") {
+    if (manualOpen) {
       manualCodeInputRef.current?.focus()
     }
-  }, [entryOption])
+  }, [manualOpen])
+
+  // auto-start camera when scanner dialog opens
+  useEffect(() => {
+    if (scannerOpen) {
+      void startScanner()
+    }
+    // when scanner dialog closes ensure camera is stopped
+    if (!scannerOpen) {
+      void stopScanner()
+    }
+  }, [scannerOpen, startScanner, stopScanner])
 
   return (
     <div id="attendance-logging" className="rounded-xl border bg-card p-5">
       <div className="flex flex-col gap-4">
-        <div className="rounded-lg border bg-muted/20 p-4">
-          <h4 className="text-base font-semibold">Attendance Session Generator</h4>
-          <p className="mt-1 text-sm text-muted-foreground">
-            VIP/Admin can set place, event, date, and time to generate a random attendance QR with equivalent backup code.
-          </p>
-
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <div>
-              <p className="mb-1 text-sm font-medium">Event Name</p>
-              <Input
-                value={eventName}
-                onChange={(event) => setEventName(event.target.value)}
-                placeholder="e.g. Sunday Service"
-              />
-            </div>
-            <div>
-              <p className="mb-1 text-sm font-medium">Place</p>
-              {userRole === "vip_chairman" ? (
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => {
-                    setSelectedBranch(e.target.value)
-                    setEventPlace(e.target.value)
-                  }}
-                  className="w-full rounded-md border px-2 py-2"
-                >
-                  <option value="">Select branch</option>
-                  {availableBranches.map((b) => (
-                    <option key={b.branchCode} value={b.branchCode}>
-                      {b.name} ({b.branchCode})
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  value={eventPlace}
-                  onChange={(event) => setEventPlace(event.target.value)}
-                  placeholder="e.g. JA1 Main Hall"
-                />
-              )}
-            </div>
-            <div>
-              <p className="mb-1 text-sm font-medium">Date</p>
-              <Input
-                type="date"
-                value={eventDate}
-                onChange={(event) => setEventDate(event.target.value)}
-              />
-            </div>
-            <div>
-              <p className="mb-1 text-sm font-medium">Time</p>
-              <Input
-                type="time"
-                value={eventTime}
-                onChange={(event) => setEventTime(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="mt-3">
-            <Button type="button" onClick={generateSessionCode} disabled={isGeneratingSession}>
-              {isGeneratingSession ? "Generating..." : "Generate Attendance QR"}
-            </Button>
-          </div>
-
-          {sessionPayload ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
-              <div className="rounded-md border bg-background p-3">
-                <div ref={qrCanvasContainerRef}>
-                  <Canvas
-                    text={sessionPayload.qrPayload}
-                    options={{
-                      width: 150,
-                      margin: 2,
-                    }}
-                  />
-                </div>
-                <div className="mt-3 grid gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={downloadSessionQrAsImage}>
-                    Download Image
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
-                    Download PDF
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-1 rounded-md border bg-background p-3 text-sm">
-                <p><span className="font-medium">Event Code:</span> {sessionPayload.eventCode}</p>
-                <p><span className="font-medium">Equivalent Backup Code:</span> {sessionPayload.backupCode}</p>
-                <p><span className="font-medium">Event:</span> {sessionPayload.eventName}</p>
-                <p><span className="font-medium">Place:</span> {sessionPayload.eventPlace}</p>
-                <p><span className="font-medium">Date/Time:</span> {sessionPayload.eventDate} {sessionPayload.eventTime}</p>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {entryOption === "manual" ? (
+        {canGenerateSession ? (
           <div className="rounded-lg border bg-muted/20 p-4">
-            <p className="text-sm font-medium">Type Member Equivalent Code</p>
+            <h4 className="text-base font-semibold">Attendance Session Generator</h4>
             <p className="mt-1 text-sm text-muted-foreground">
-              Type the member code manually (QR token or backup code), then confirm name before submit.
+              VIP/Admin can set place, event, date, and time to generate a random attendance QR with equivalent backup code.
             </p>
-            <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="mb-1 text-sm font-medium">Event Name</p>
+                <Input
+                  value={eventName}
+                  onChange={(event) => setEventName(event.target.value)}
+                  placeholder="e.g. Sunday Service"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Place</p>
+                {userRole === "vip_chairman" ? (
+                  <select
+                    value={selectedBranch}
+                    onChange={(e) => {
+                      setSelectedBranch(e.target.value)
+                      setEventPlace(e.target.value)
+                    }}
+                    className="w-full rounded-md border px-2 py-2"
+                  >
+                    <option value="">Select branch</option>
+                    {availableBranches.map((b) => (
+                      <option key={b.branchCode} value={b.branchCode}>
+                        {b.name} ({b.branchCode})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    value={eventPlace}
+                    onChange={(event) => setEventPlace(event.target.value)}
+                    placeholder="e.g. JA1 Main Hall"
+                  />
+                )}
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Date</p>
+                <Input
+                  type="date"
+                  value={eventDate}
+                  onChange={(event) => setEventDate(event.target.value)}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">Time</p>
+                <Input
+                  type="time"
+                  value={eventTime}
+                  onChange={(event) => setEventTime(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <Button type="button" onClick={generateSessionCode} disabled={isGeneratingSession}>
+                {isGeneratingSession ? "Generating..." : "Generate Attendance QR"}
+              </Button>
+            </div>
+
+            {sessionPayload ? (
+              <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
+                <div className="rounded-md border bg-background p-3">
+                  <div ref={qrCanvasContainerRef}>
+                    <Canvas
+                      text={sessionPayload.qrPayload}
+                      options={{
+                        width: 150,
+                        margin: 2,
+                      }}
+                    />
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={downloadSessionQrAsImage}>
+                      Download Image
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
+                      Download PDF
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1 rounded-md border bg-background p-3 text-sm">
+                  <p><span className="font-medium">Event Code:</span> {sessionPayload.eventCode}</p>
+                  <p><span className="font-medium">Equivalent Backup Code:</span> {sessionPayload.backupCode}</p>
+                  <p><span className="font-medium">Event:</span> {sessionPayload.eventName}</p>
+                  <p><span className="font-medium">Place:</span> {sessionPayload.eventPlace}</p>
+                  <p><span className="font-medium">Date/Time:</span> {sessionPayload.eventDate} {sessionPayload.eventTime}</p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Scanner and manual dialogs are opened via navbar events; no inline buttons here. */}
+
+        {/* Manual code dialog */}
+        <Dialog open={manualOpen} onOpenChange={(open) => {
+          setManualOpen(open)
+          if (open) manualCodeInputRef.current?.focus()
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogTitle>Type Member Equivalent Code</DialogTitle>
+            <DialogDescription>
+              Type the member code manually (QR token or backup code), then confirm name before submit.
+            </DialogDescription>
+
+            <div className="mt-4 grid gap-3">
               <div>
                 <p className="mb-1 text-sm font-medium">Member Code</p>
                 <Input
@@ -655,35 +774,45 @@ export function MemberQrScanner({
                   placeholder="e.g. DUM-AB12CD"
                 />
               </div>
-              <Button type="button" variant="outline" onClick={resolveTypedMemberCode}>
-                Use Typed Code
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" onClick={() => { void resolveTypedMemberCode(); setManualOpen(false) }}>
+                  Use Typed Code
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setManualOpen(false)}>
+                  Close
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : null}
+          </DialogContent>
+        </Dialog>
 
-        {entryOption === "scan" ? (
-          <>
-            <p className="text-xs text-muted-foreground">
-              Scanner uses active event code: {eventCode || "Generate attendance QR first"}
-            </p>
+        {/* Scanner dialog */}
+        <Dialog open={scannerOpen} onOpenChange={(open) => {
+          setScannerOpen(open)
+        }}>
+          <DialogContent className="max-w-2xl">
+            <DialogTitle>Scan Attendance QR</DialogTitle>
+            <DialogDescription>
+              Open your camera to scan member QR or session QR. Member QR will be validated by the server; session QR must be admin-generated.
+            </DialogDescription>
 
-            <div
-              id="member-qr-reader"
-              className="min-h-[280px] overflow-hidden rounded-lg border bg-background"
-            />
-
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                variant={isScanning ? "outline" : "default"}
-                onClick={() => void (isScanning ? stopScanner() : startScanner())}
-              >
-                {isScanning ? "Stop Scanner" : "Start Scanner"}
-              </Button>
+            <div className="mt-4">
+              <p className="text-xs text-muted-foreground">{sessionPayload ? `Active event: ${eventCode}` : `No active event loaded`}</p>
+              <div id="member-qr-reader" className="min-h-[280px] overflow-hidden rounded-lg border bg-background mt-2" />
+              <div className="mt-3 flex gap-3">
+                <Button type="button" variant={isScanning ? "outline" : "default"} onClick={() => void (isScanning ? stopScanner() : startScanner())}>
+                  {isScanning ? "Stop Scanner" : "Start Camera"}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => { setSessionPayload(null); setEventCode("") }}>
+                  Clear Session
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => { setScannerOpen(false); void stopScanner() }}>
+                  Close
+                </Button>
+              </div>
             </div>
-          </>
-        ) : null}
+          </DialogContent>
+        </Dialog>
 
         {pendingScan ? (
           <div className="rounded-lg border bg-muted/20 p-4">
@@ -721,20 +850,33 @@ export function MemberQrScanner({
           </div>
         ) : null}
 
-        {status.message ? (
-          <p
-            className={[
-              "text-sm",
-              status.tone === "error" ? "text-destructive" : "",
-              status.tone === "success" ? "text-emerald-600" : "",
-              status.tone === "loading" ? "text-primary" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {status.message}
-          </p>
-        ) : null}
+        {/* For non-admin users show personal attendance history table instead of inline status messages */}
+        {(() => {
+          const isAdmin =
+            userRole === "vip_chairman" ||
+            userRole === "supervising_pastor" ||
+            userRole === "age_group_chairman" ||
+            userRole === "branch_admin"
+
+          if (!isAdmin) {
+            return <MemberAttendanceHistory />
+          }
+
+          return status.message ? (
+            <p
+              className={[
+                "text-sm",
+                status.tone === "error" ? "text-destructive" : "",
+                status.tone === "success" ? "text-emerald-600" : "",
+                status.tone === "loading" ? "text-primary" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {status.message}
+            </p>
+          ) : null
+        })()}
 
         {lastValue ? (
           <p className="break-all text-xs text-muted-foreground">
