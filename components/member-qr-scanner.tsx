@@ -715,35 +715,113 @@ export function MemberQrScanner({
   const startScanner = useCallback(async () => {
     if (isScanning) return
 
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setStatus({
+        tone: "error",
+        message: "Camera requires HTTPS on mobile browsers. Open this site using https://",
+      })
+      return
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.mediaDevices?.getUserMedia) {
+      setStatus({
+        tone: "error",
+        message: "This browser does not support camera access.",
+      })
+      return
+    }
+
     setStatus({ tone: "loading", message: "Starting camera..." })
 
     try {
       const { Html5Qrcode } = await import("html5-qrcode")
       const scanner = new Html5Qrcode("member-qr-reader")
+      const scanConfig = {
+        fps: 10,
+        qrbox: { width: 260, height: 260 },
+      }
 
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 260, height: 260 },
-        },
-        async (decodedText: string) => {
-          if (processingRef.current) return
-          processingRef.current = true
-          setLastValue(decodedText)
+      const onScanSuccess = async (decodedText: string) => {
+        if (processingRef.current) return
+        processingRef.current = true
+        setLastValue(decodedText)
 
-          try {
-            await handleDecodedScan(decodedText)
-          } finally {
-            window.setTimeout(() => {
-              processingRef.current = false
-            }, 1200)
-          }
-        },
-        () => {
-          // ignore frequent decode errors
+        try {
+          await handleDecodedScan(decodedText)
+        } finally {
+          window.setTimeout(() => {
+            processingRef.current = false
+          }, 1200)
         }
-      )
+      }
+
+      const onScanError = () => {
+        // ignore frequent decode errors
+      }
+
+      let startupError: unknown = null
+      let started = false
+
+      try {
+        await scanner.start(
+          { facingMode: { ideal: "environment" } },
+          scanConfig,
+          onScanSuccess,
+          onScanError
+        )
+        started = true
+      } catch (primaryError) {
+        startupError = primaryError
+      }
+
+      // Some mobile browsers ignore/deny facingMode. Fallback to explicit camera ID.
+      if (!started) {
+        try {
+          const cameras = await Html5Qrcode.getCameras()
+          const rearCamera =
+            cameras.find((camera) => /back|rear|environment/i.test(camera.label)) ?? cameras[0]
+
+          if (rearCamera?.id) {
+            await scanner.start(rearCamera.id, scanConfig, onScanSuccess, onScanError)
+            started = true
+          }
+        } catch (fallbackError) {
+          startupError = fallbackError
+        }
+      }
+
+      if (!started) {
+        try {
+          await Promise.resolve(scanner.clear())
+        } catch {
+          // noop
+        }
+
+        const details = startupError instanceof Error ? startupError.message : String(startupError)
+        const lower = details.toLowerCase()
+
+        if (lower.includes("notallowed") || lower.includes("permission") || lower.includes("denied")) {
+          setStatus({
+            tone: "error",
+            message: "Camera permission denied. Allow camera access in browser settings and retry.",
+          })
+          return
+        }
+
+        if (lower.includes("notfound") || lower.includes("device not found") || lower.includes("overconstrained")) {
+          setStatus({
+            tone: "error",
+            message: "No usable camera found on this device.",
+          })
+          return
+        }
+
+        setStatus({
+          tone: "error",
+          message: "Unable to start camera. Ensure HTTPS is used and permission is allowed.",
+        })
+        return
+      }
 
       scannerRef.current = scanner
       setIsScanning(true)
@@ -754,7 +832,7 @@ export function MemberQrScanner({
         message: "Unable to access camera. Allow camera permission and try again.",
       })
     }
-  }, [eventCode, handleDecodedScan, isScanning, sessionPayload])
+  }, [handleDecodedScan, isScanning])
 
   useEffect(() => {
     return () => {
