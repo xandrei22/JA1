@@ -856,35 +856,37 @@ export function MemberQrScanner({
             </div>
 
             {sessionPayload ? (
-              <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
-                <div className="rounded-md border bg-background p-3">
-                  <div ref={qrCanvasContainerRef}>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[240px_1fr]">
+                <div className="rounded-md border bg-background p-4">
+                  <div ref={qrCanvasContainerRef} className="flex justify-center">
                     <Canvas
                       text={sessionPayload.qrPayload}
                       options={{
-                        width: 150,
+                        width: 190,
                         margin: 2,
                       }}
                     />
                   </div>
                   <div className="mt-3 grid gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={downloadSessionQrAsImage}>
+                    <Button className="w-full" type="button" variant="outline" size="sm" onClick={downloadSessionQrAsImage}>
                       Download Image
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
+                    <Button className="w-full" type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
                       Download PDF
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionAttendeesCsv()}>
+                    <Button className="w-full" type="button" variant="outline" size="sm" onClick={() => void downloadSessionAttendeesCsv()}>
                       Download Attendees CSV
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-1 rounded-md border bg-background p-3 text-sm">
-                  <p><span className="font-medium">Event Code:</span> {sessionPayload.eventCode}</p>
-                  <p><span className="font-medium">Equivalent Backup Code:</span> {sessionPayload.backupCode}</p>
-                  <p><span className="font-medium">Event:</span> {sessionPayload.eventName}</p>
-                  <p><span className="font-medium">Place:</span> {sessionPayload.eventPlace}</p>
-                  <p><span className="font-medium">Date/Time:</span> {sessionPayload.eventDate} {sessionPayload.eventStartTime} - {sessionPayload.eventEndTime || "--:--"}</p>
+                <div className="rounded-md border bg-background p-4 text-sm">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <p><span className="font-medium">Event Code:</span> {sessionPayload.eventCode}</p>
+                    <p><span className="font-medium">Equivalent Backup Code:</span> {sessionPayload.backupCode}</p>
+                    <p><span className="font-medium">Event:</span> {sessionPayload.eventName}</p>
+                    <p><span className="font-medium">Place:</span> {sessionPayload.eventPlace}</p>
+                    <p className="sm:col-span-2"><span className="font-medium">Date/Time:</span> {sessionPayload.eventDate} {sessionPayload.eventStartTime} - {sessionPayload.eventEndTime || "--:--"}</p>
+                  </div>
                 </div>
               </div>
             ) : null}
