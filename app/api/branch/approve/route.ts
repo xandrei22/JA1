@@ -5,6 +5,21 @@ import { authOptions } from "@/lib/server/auth-options"
 import { isSupabaseConfigured, selectSupabaseRows, insertSupabaseRow, updateSupabaseRows } from "@/lib/server/supabase-admin"
 import { ROLES } from "@/lib/server/rbac"
 
+type BranchRequestRow = {
+  branch_code: string
+  name: string
+  address: string
+  leader: string
+}
+
+type BranchInsertRow = {
+  branch_code: string
+  name: string
+  address: string
+  leader: string
+  created_at: string
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
 
@@ -28,14 +43,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const requests = await selectSupabaseRows({ table: "branch_requests", filters: { branch_code: branchCode, status: "pending" }, limit: 1 })
+    const requests = await selectSupabaseRows<BranchRequestRow>({
+      table: "branch_requests",
+      filters: { branch_code: branchCode, status: "pending" },
+      limit: 1,
+    })
     const req = requests?.[0]
     if (!req) {
       return NextResponse.json({ error: "Pending request not found" }, { status: 404 })
     }
 
     // insert into branches
-    const inserted = await insertSupabaseRow("branches", {
+    const inserted = await insertSupabaseRow<BranchInsertRow>("branches", {
       branch_code: req.branch_code,
       name: req.name,
       address: req.address,

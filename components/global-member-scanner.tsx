@@ -43,8 +43,8 @@ export default function GlobalMemberScanner() {
       setMountedScanner(true)
       // dynamically import scanner component when needed
       if (!ScannerComp) {
-        import("./member-qr-scanner").then((mod) => {
-          setScannerComp(() => mod.MemberQrScanner ?? mod.default ?? mod)
+        import("./member-qr-scanner").then(({ MemberQrScanner }) => {
+          setScannerComp(() => MemberQrScanner)
         })
       }
     }
@@ -53,8 +53,8 @@ export default function GlobalMemberScanner() {
       setInitialEntry("manual")
       setMountedScanner(true)
       if (!ScannerComp) {
-        import("./member-qr-scanner").then((mod) => {
-          setScannerComp(() => mod.MemberQrScanner ?? mod.default ?? mod)
+        import("./member-qr-scanner").then(({ MemberQrScanner }) => {
+          setScannerComp(() => MemberQrScanner)
         })
       }
     }

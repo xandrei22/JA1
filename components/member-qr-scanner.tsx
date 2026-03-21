@@ -868,7 +868,13 @@ export function MemberQrScanner({
                     />
                   </div>
                   <div className="mt-3 grid gap-2">
-                    <Button className="w-full" type="button" variant="outline" size="sm" onClick={downloadSessionQrAsImage}>
+                    <Button
+                      className="w-full"
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void downloadSessionQrAsImage()}
+                    >
                       Download Image
                     </Button>
                     <Button className="w-full" type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
