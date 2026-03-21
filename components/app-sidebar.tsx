@@ -89,7 +89,10 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
             icon: Users,
             items: [
               { title: "Manage Members", url: "/dashboard?section=member-management" },
-              { title: "Reset Credentials", url: "/dashboard?section=member-management" },
+              ...(user.role === "vip_chairman"
+                ? [{ title: "Admin Management", url: "/dashboard?section=admin-management" }]
+                : []),
+              // Reset Credentials item commented as it duplicates management
               ...(hasPermission(permissions, "first_timers:view") ? [{ title: "First Timers", url: "/dashboard?section=first-timers-view" }] : []),
             ],
           },
@@ -105,7 +108,7 @@ export function AppSidebar({ user, permissions, ...props }: AppSidebarProps) {
           },
         ]
       : []),
-    ...(hasPermission(permissions, "branch:manage") || hasPermission(permissions, "satellite:view") || hasPermission(permissions, "first_timers:view")
+    ...(hasPermission(permissions, "branch:manage") || hasPermission(permissions, "satellite:view") || hasPermission(permissions, "first_timers:view") || hasPermission(permissions, "branch:recognition_request") || hasPermission(permissions, "branch:approve")
       ? [
           {
             title: "Branches",

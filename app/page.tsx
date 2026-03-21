@@ -16,6 +16,7 @@ import {
   Compass,
   QrCode,
 } from "lucide-react";
+import DashboardLandingCards from "@/components/dashboard-landing-cards"
 
 export default function Home() {
   const gallerySlides = [
@@ -32,16 +33,16 @@ export default function Home() {
 
   const highlights = [
     {
-      title: "System Purpose",
+      title: "JA1 Attendance System",
       description:
-        "JA1 uses this platform to record attendance with QR + backup codes for reliable and accurate ministry reporting.",
-      icon: QrCode,
+        "To maintain accurate records during every service using randomized QR codes, manual backup attendance codes, and centralized role-based oversight.ose of the JA1 System",
+      icon: Church,
     },
     {
-      title: "Who JA1 Is",
+      title: "System Purpose",
       description:
-        "Jesus the Anointed One (JA1) is a church community focused on discipleship, outreach, and organized ministry care.",
-      icon: Church,
+        "JA1 allows to record attendance with QR + backup codes for reliable and accurate ministry reporting.",
+      icon: QrCode,
     },
     {
       title: "Why This Matters",
@@ -71,6 +72,13 @@ export default function Home() {
             <Button size="lg" variant="outline" className="h-14 px-8 text-lg" asChild>
               <Link href="#gallery-section">Explore JA1 Sections</Link>
             </Button>
+          </div>
+        </section>
+
+        {/* Insert landing cards between hero and gallery as requested */}
+        <section className="w-full bg-transparent py-8">
+          <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+            <DashboardLandingCards />
           </div>
         </section>
 
@@ -129,7 +137,7 @@ export default function Home() {
           <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                JA1 + System Overview
+                JA1 System Overview
               </h2>
               <p className="mt-3 text-lg text-muted-foreground">
                 The homepage now focuses on both ministry identity and the platform purpose.
@@ -171,23 +179,6 @@ export default function Home() {
                     <Link href="https://find.ja1church.com/" target="_blank" rel="noreferrer">
                       Open find.ja1church.com
                     </Link>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="h-full rounded-2xl border border-primary/20 bg-[#E7D2DD] px-6 pb-6 pt-14 text-center text-foreground shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl sm:px-10">
-                <div className="flex h-full flex-col items-center gap-8">
-                  <div>
-                    <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                      Purpose of the JA1 System
-                    </h2>
-                    <p className="mt-4 text-lg">
-                      To maintain accurate records during every service using randomized QR codes, manual backup attendance codes, and centralized role-based oversight.
-                    </p>
-                  </div>
-
-                  <Button size="lg" className="mt-auto" asChild>
-                    <Link href="/signup">Get Started Now</Link>
                   </Button>
                 </div>
               </div>

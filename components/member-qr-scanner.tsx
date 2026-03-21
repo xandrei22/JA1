@@ -35,10 +35,16 @@ type AttendanceSessionPayload = {
   eventName: string
   eventPlace: string
   eventDate: string
-  eventTime: string
+  eventStartTime: string
+  eventEndTime: string
   backupCode: string
   qrPayload: string
   generatedAt: string
+}
+
+type SessionListResponse = {
+  records?: AttendanceSessionPayload[]
+  error?: string
 }
 
 type PendingScan = {
@@ -63,16 +69,19 @@ export function MemberQrScanner({
   const manualCodeInputRef = useRef<HTMLInputElement | null>(null)
   const processingRef = useRef(false)
 
-  const [eventName, setEventName] = useState("Sunday Service")
-  const [eventPlace, setEventPlace] = useState(branchCode)
-  const [selectedBranch, setSelectedBranch] = useState(branchCode)
+  const [eventName, setEventName] = useState("")
+  const [eventPlace, setEventPlace] = useState("")
+  const [selectedBranch, setSelectedBranch] = useState("")
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userBranch, setUserBranch] = useState<string | null>(null)
   const [availableBranches, setAvailableBranches] = useState<{ branchCode: string; name: string }[]>([])
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10))
-  const [eventTime, setEventTime] = useState("09:00")
+  const [eventStartTime, setEventStartTime] = useState("09:00")
+  const [eventEndTime, setEventEndTime] = useState("10:00")
   const [eventCode, setEventCode] = useState("")
   const [sessionPayload, setSessionPayload] = useState<AttendanceSessionPayload | null>(null)
+  const [sessionActivities, setSessionActivities] = useState<AttendanceSessionPayload[]>([])
+  const [isLoadingActivities, setIsLoadingActivities] = useState(false)
   const [pendingScan, setPendingScan] = useState<PendingScan | null>(null)
   const [isGeneratingSession, setIsGeneratingSession] = useState(false)
   const [isConfirmingName, setIsConfirmingName] = useState(false)
@@ -97,6 +106,10 @@ export function MemberQrScanner({
   }, [initialEntryOption])
 
   const canGenerateSession = userRole === "vip_chairman" || userRole === "supervising_pastor"
+
+  const getBranchScope = useCallback(() => {
+    return (selectedBranch || userBranch || branchCode || "").trim()
+  }, [selectedBranch, userBranch, branchCode])
 
   useEffect(() => {
     function onOpenScanner() {
@@ -128,11 +141,38 @@ export function MemberQrScanner({
     }
   }, [scannerOpen])
 
+  const loadSessionActivities = useCallback(async () => {
+    const activeBranch = getBranchScope()
+    if (!activeBranch) {
+      setSessionActivities([])
+      return
+    }
+
+    setIsLoadingActivities(true)
+    try {
+      const res = await fetch(
+        `/api/attendance/session-code?branchCode=${encodeURIComponent(activeBranch)}&limit=100`
+      )
+      const payload = (await res.json().catch(() => ({}))) as SessionListResponse
+      if (!res.ok) {
+        setStatus({ tone: "error", message: payload.error ?? "Failed to load attendance activities." })
+        setSessionActivities([])
+        return
+      }
+      setSessionActivities(payload.records ?? [])
+    } catch {
+      setStatus({ tone: "error", message: "Failed to load attendance activities." })
+      setSessionActivities([])
+    } finally {
+      setIsLoadingActivities(false)
+    }
+  }, [getBranchScope])
+
   const generateSessionCode = useCallback(async () => {
-    if (!eventName.trim() || !eventPlace.trim() || !eventDate.trim() || !eventTime.trim()) {
+    if (!eventName.trim() || !eventPlace.trim() || !eventDate.trim() || !eventStartTime.trim() || !eventEndTime.trim()) {
       setStatus({
         tone: "error",
-        message: "Event name, place, date, and time are required.",
+        message: "Event name, place, date, start time, and end time are required.",
       })
       return
     }
@@ -146,11 +186,12 @@ export function MemberQrScanner({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        branchCode: selectedBranch || branchCode,
+        branchCode: getBranchScope(),
         eventName: eventName.trim(),
         eventPlace: eventPlace.trim(),
         eventDate: eventDate.trim(),
-        eventTime: eventTime.trim(),
+        eventStartTime: eventStartTime.trim(),
+        eventEndTime: eventEndTime.trim(),
       }),
     })
 
@@ -171,11 +212,12 @@ export function MemberQrScanner({
     const generated = payload as AttendanceSessionPayload
     setSessionPayload(generated)
     setEventCode(generated.eventCode)
+    void loadSessionActivities()
     setStatus({
       tone: "success",
       message: `Attendance session ready: ${generated.eventCode}`,
     })
-  }, [branchCode, eventDate, eventName, eventPlace, eventTime])
+  }, [eventDate, eventEndTime, eventName, eventPlace, eventStartTime, getBranchScope, loadSessionActivities])
 
   // load current user role and branch; if super admin, load branches for selection
   useEffect(() => {
@@ -238,6 +280,11 @@ export function MemberQrScanner({
     }
   }, [selectedBranch, branchCode])
 
+  useEffect(() => {
+    if (!canGenerateSession) return
+    void loadSessionActivities()
+  }, [canGenerateSession, loadSessionActivities])
+
   // NOTE: polling removed — the component attempts one immediate fetch
   // for a current session on mount. Users without generator rights should
   // ask VIP/Admin to create a session; attempting to start the scanner
@@ -246,8 +293,8 @@ export function MemberQrScanner({
   useEffect(() => {
     // keep selectedBranch in sync with incoming prop or user branch
     if (userRole === "vip_chairman") {
-      // super admin may choose; keep prop as fallback
-      setSelectedBranch((prev) => prev || branchCode)
+      // super admin may choose freely; don't force a default
+      // keep selectedBranch as is
     } else {
       setSelectedBranch(userBranch ?? branchCode)
     }
@@ -304,7 +351,8 @@ export function MemberQrScanner({
             eventName: parsed.eventName ?? "",
             eventPlace: parsed.eventPlace ?? "",
             eventDate: parsed.eventDate ?? "",
-            eventTime: parsed.eventTime ?? "",
+            eventStartTime: parsed.eventStartTime ?? parsed.eventTime ?? "",
+            eventEndTime: parsed.eventEndTime ?? "",
             backupCode: parsed.equivalentCode ?? "",
             qrPayload: decodedText,
             generatedAt: parsed.issuedAt ?? new Date().toISOString(),
@@ -477,22 +525,20 @@ export function MemberQrScanner({
     })
   }, [defaultMemberName, typedMemberCode])
 
-  const getSessionQrCanvas = useCallback(() => {
-    return qrCanvasContainerRef.current?.querySelector("canvas") ?? null
-  }, [])
+  const drawSessionExportCanvas = useCallback(async (session: AttendanceSessionPayload) => {
+    const { toDataURL } = await import("qrcode")
+    const qrDataUrl = await toDataURL(session.qrPayload, {
+      margin: 1,
+      width: 300,
+      color: { dark: "#111827", light: "#ffffff" },
+    })
 
-  const downloadSessionQrAsImage = useCallback(() => {
-    if (!sessionPayload) {
-      setStatus({ tone: "error", message: "Generate attendance QR first." })
-      return
-    }
-
-    const canvas = getSessionQrCanvas()
-
-    if (!canvas) {
-      setStatus({ tone: "error", message: "QR image is not ready yet. Try again." })
-      return
-    }
+    const qrImage = new Image()
+    await new Promise<void>((resolve, reject) => {
+      qrImage.onload = () => resolve()
+      qrImage.onerror = () => reject(new Error("QR image load failed"))
+      qrImage.src = qrDataUrl
+    })
 
     const exportCanvas = document.createElement("canvas")
     const exportWidth = 420
@@ -501,10 +547,8 @@ export function MemberQrScanner({
     exportCanvas.height = exportHeight
 
     const context = exportCanvas.getContext("2d")
-
     if (!context) {
-      setStatus({ tone: "error", message: "Unable to prepare image download." })
-      return
+      throw new Error("Unable to prepare image")
     }
 
     context.fillStyle = "#ffffff"
@@ -513,7 +557,7 @@ export function MemberQrScanner({
     const qrSize = 300
     const qrX = (exportWidth - qrSize) / 2
     const qrY = 80
-    context.drawImage(canvas, qrX, qrY, qrSize, qrSize)
+    context.drawImage(qrImage, qrX, qrY, qrSize, qrSize)
 
     context.fillStyle = "#111827"
     context.textAlign = "center"
@@ -521,58 +565,86 @@ export function MemberQrScanner({
     context.fillText("JA1 Attendance QR", exportWidth / 2, 36)
 
     context.font = "16px sans-serif"
-    context.fillText(`Event Code: ${sessionPayload.eventCode}`, exportWidth / 2, 420)
-    context.fillText(`Equivalent Code: ${sessionPayload.backupCode}`, exportWidth / 2, 452)
-    context.fillText(`${sessionPayload.eventDate} ${sessionPayload.eventTime}`, exportWidth / 2, 484)
+    context.fillText(`Event Code: ${session.eventCode}`, exportWidth / 2, 420)
+    context.fillText(`Equivalent Code: ${session.backupCode}`, exportWidth / 2, 452)
+    context.fillText(
+      `${session.eventDate} ${session.eventStartTime} - ${session.eventEndTime || "--:--"}`,
+      exportWidth / 2,
+      484
+    )
+
+    return exportCanvas
+  }, [])
+
+  const downloadSessionQrAsImage = useCallback(async (targetSession?: AttendanceSessionPayload) => {
+    const session = targetSession ?? sessionPayload
+    if (!session) {
+      setStatus({ tone: "error", message: "Generate attendance QR first." })
+      return
+    }
+
+    let exportCanvas: HTMLCanvasElement
+    try {
+      exportCanvas = await drawSessionExportCanvas(session)
+    } catch {
+      setStatus({ tone: "error", message: "Unable to prepare image download." })
+      return
+    }
 
     const imageUrl = exportCanvas.toDataURL("image/png")
     const link = document.createElement("a")
-    const safeEventCode = sessionPayload.eventCode.replace(/[^a-z0-9_-]/gi, "-")
+    const safeEventCode = session.eventCode.replace(/[^a-z0-9_-]/gi, "-")
     link.href = imageUrl
     link.download = `${safeEventCode}-attendance-qr.png`
     link.click()
 
     setStatus({
       tone: "success",
-      message: `QR image downloaded. Equivalent code: ${sessionPayload.backupCode}`,
+      message: `QR image downloaded. Equivalent code: ${session.backupCode}`,
     })
-  }, [getSessionQrCanvas, sessionPayload])
+  }, [drawSessionExportCanvas, sessionPayload])
 
-  const downloadSessionQrAsPdf = useCallback(async () => {
-    if (!sessionPayload) {
+  const downloadSessionQrAsPdf = useCallback(async (targetSession?: AttendanceSessionPayload) => {
+    const session = targetSession ?? sessionPayload
+    if (!session) {
       setStatus({ tone: "error", message: "Generate attendance QR first." })
       return
     }
 
-    const canvas = getSessionQrCanvas()
-
-    if (!canvas) {
-      setStatus({ tone: "error", message: "QR image is not ready yet. Try again." })
+    let exportCanvas: HTMLCanvasElement
+    try {
+      exportCanvas = await drawSessionExportCanvas(session)
+    } catch {
+      setStatus({ tone: "error", message: "Unable to prepare PDF download." })
       return
     }
 
-    const imageUrl = canvas.toDataURL("image/png")
+    const imageUrl = exportCanvas.toDataURL("image/png")
 
     try {
       const { jsPDF } = await import("jspdf")
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-      const safeEventCode = sessionPayload.eventCode.replace(/[^a-z0-9_-]/gi, "-")
+      const safeEventCode = session.eventCode.replace(/[^a-z0-9_-]/gi, "-")
 
       pdf.setFontSize(14)
       pdf.text("JA1 Attendance QR", 15, 18)
       pdf.setFontSize(11)
-      pdf.text(`Event Code: ${sessionPayload.eventCode}`, 15, 28)
-      pdf.text(`Equivalent Code: ${sessionPayload.backupCode}`, 15, 35)
-      pdf.text(`Event: ${sessionPayload.eventName}`, 15, 42)
-      pdf.text(`Place: ${sessionPayload.eventPlace}`, 15, 49)
-      pdf.text(`Date/Time: ${sessionPayload.eventDate} ${sessionPayload.eventTime}`, 15, 56)
+      pdf.text(`Event Code: ${session.eventCode}`, 15, 28)
+      pdf.text(`Equivalent Code: ${session.backupCode}`, 15, 35)
+      pdf.text(`Event: ${session.eventName}`, 15, 42)
+      pdf.text(`Place: ${session.eventPlace}`, 15, 49)
+      pdf.text(
+        `Date/Time: ${session.eventDate} ${session.eventStartTime} - ${session.eventEndTime || "--:--"}`,
+        15,
+        56
+      )
 
       pdf.addImage(imageUrl, "PNG", 15, 66, 70, 70)
       pdf.save(`${safeEventCode}-attendance-qr.pdf`)
 
       setStatus({
         tone: "success",
-        message: `QR PDF downloaded. Equivalent code: ${sessionPayload.backupCode}`,
+        message: `QR PDF downloaded. Equivalent code: ${session.backupCode}`,
       })
     } catch {
       setStatus({
@@ -580,7 +652,65 @@ export function MemberQrScanner({
         message: "Failed to generate PDF download.",
       })
     }
-  }, [getSessionQrCanvas, sessionPayload])
+  }, [drawSessionExportCanvas, sessionPayload])
+
+  const downloadSessionAttendeesCsv = useCallback(async (targetSession?: AttendanceSessionPayload) => {
+    const session = targetSession ?? sessionPayload
+    if (!session) {
+      setStatus({ tone: "error", message: "Generate attendance QR first." })
+      return
+    }
+
+    try {
+      const params = new URLSearchParams({
+        branchCode: session.branchCode,
+        event: session.eventCode,
+        start: session.eventDate,
+        end: session.eventDate,
+        export: "csv",
+        limit: "10000",
+      })
+
+      if (session.eventStartTime) {
+        params.set("startTime", session.eventStartTime)
+      }
+      if (session.eventEndTime) {
+        params.set("endTime", session.eventEndTime)
+      }
+
+      const response = await fetch(`/api/attendance/log?${params.toString()}`, {
+        method: "GET",
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string }
+        setStatus({ tone: "error", message: payload.error ?? "Failed to download attendee list." })
+        return
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      const safeEventCode = session.eventCode.replace(/[^a-z0-9_-]/gi, "-")
+      link.download = `${safeEventCode}-attendees.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      setStatus({ tone: "success", message: "Attendee list CSV downloaded." })
+    } catch {
+      setStatus({ tone: "error", message: "Failed to download attendee list." })
+    }
+  }, [sessionPayload])
+
+  const isSessionActive = useCallback((session: AttendanceSessionPayload) => {
+    const timePart = session.eventEndTime?.trim() || session.eventStartTime?.trim() || "23:59"
+    const boundary = new Date(`${session.eventDate}T${timePart}:59`)
+    if (Number.isNaN(boundary.getTime())) return false
+    return Date.now() <= boundary.getTime()
+  }, [])
 
   const startScanner = useCallback(async () => {
     if (isScanning) return
@@ -656,7 +786,7 @@ export function MemberQrScanner({
           <div className="rounded-lg border bg-muted/20 p-4">
             <h4 className="text-base font-semibold">Attendance Session Generator</h4>
             <p className="mt-1 text-sm text-muted-foreground">
-              VIP/Admin can set place, event, date, and time to generate a random attendance QR with equivalent backup code.
+              VIP/Admin can set place, event, date, and start/end time to generate a random attendance QR with equivalent backup code.
             </p>
 
             <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -665,18 +795,23 @@ export function MemberQrScanner({
                 <Input
                   value={eventName}
                   onChange={(event) => setEventName(event.target.value)}
-                  placeholder="e.g. Sunday Service"
+                  placeholder="Enter Event Name"
                 />
               </div>
               <div>
                 <p className="mb-1 text-sm font-medium">Place</p>
-                {userRole === "vip_chairman" ? (
+                <Input
+                  value={eventPlace}
+                  onChange={(event) => setEventPlace(event.target.value)}
+                  placeholder="Enter Name or Address"
+                />
+              </div>
+              {userRole === "vip_chairman" ? (
+                <div>
+                  <p className="mb-1 text-sm font-medium">Branch</p>
                   <select
                     value={selectedBranch}
-                    onChange={(e) => {
-                      setSelectedBranch(e.target.value)
-                      setEventPlace(e.target.value)
-                    }}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
                     className="w-full rounded-md border px-2 py-2"
                   >
                     <option value="">Select branch</option>
@@ -686,14 +821,8 @@ export function MemberQrScanner({
                       </option>
                     ))}
                   </select>
-                ) : (
-                  <Input
-                    value={eventPlace}
-                    onChange={(event) => setEventPlace(event.target.value)}
-                    placeholder="e.g. JA1 Main Hall"
-                  />
-                )}
-              </div>
+                </div>
+              ) : null}
               <div>
                 <p className="mb-1 text-sm font-medium">Date</p>
                 <Input
@@ -703,11 +832,19 @@ export function MemberQrScanner({
                 />
               </div>
               <div>
-                <p className="mb-1 text-sm font-medium">Time</p>
+                <p className="mb-1 text-sm font-medium">Start Time</p>
                 <Input
                   type="time"
-                  value={eventTime}
-                  onChange={(event) => setEventTime(event.target.value)}
+                  value={eventStartTime}
+                  onChange={(event) => setEventStartTime(event.target.value)}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-medium">End Time</p>
+                <Input
+                  type="time"
+                  value={eventEndTime}
+                  onChange={(event) => setEventEndTime(event.target.value)}
                 />
               </div>
             </div>
@@ -737,6 +874,9 @@ export function MemberQrScanner({
                     <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionQrAsPdf()}>
                       Download PDF
                     </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void downloadSessionAttendeesCsv()}>
+                      Download Attendees CSV
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-1 rounded-md border bg-background p-3 text-sm">
@@ -744,10 +884,102 @@ export function MemberQrScanner({
                   <p><span className="font-medium">Equivalent Backup Code:</span> {sessionPayload.backupCode}</p>
                   <p><span className="font-medium">Event:</span> {sessionPayload.eventName}</p>
                   <p><span className="font-medium">Place:</span> {sessionPayload.eventPlace}</p>
-                  <p><span className="font-medium">Date/Time:</span> {sessionPayload.eventDate} {sessionPayload.eventTime}</p>
+                  <p><span className="font-medium">Date/Time:</span> {sessionPayload.eventDate} {sessionPayload.eventStartTime} - {sessionPayload.eventEndTime || "--:--"}</p>
                 </div>
               </div>
             ) : null}
+
+            <div className="mt-5 rounded-md border bg-background p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">Attendance Activities</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void loadSessionActivities()}>
+                  Refresh
+                </Button>
+              </div>
+
+              {isLoadingActivities ? (
+                <p className="text-sm text-muted-foreground">Loading activities...</p>
+              ) : sessionActivities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No attendance activities yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[980px] border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="px-2 py-2">Event</th>
+                        <th className="px-2 py-2">Place</th>
+                        <th className="px-2 py-2">Date</th>
+                        <th className="px-2 py-2">Time</th>
+                        <th className="px-2 py-2">Event Code</th>
+                        <th className="px-2 py-2">Manual Code</th>
+                        <th className="px-2 py-2">Status</th>
+                        <th className="px-2 py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sessionActivities.map((activity) => {
+                        const active = isSessionActive(activity)
+                        return (
+                          <tr key={`${activity.eventCode}-${activity.generatedAt}`} className="border-b align-top">
+                            <td className="px-2 py-2 font-medium">{activity.eventName}</td>
+                            <td className="px-2 py-2">{activity.eventPlace}</td>
+                            <td className="px-2 py-2">{activity.eventDate}</td>
+                            <td className="px-2 py-2">{activity.eventStartTime} - {activity.eventEndTime || "--:--"}</td>
+                            <td className="px-2 py-2">{activity.eventCode}</td>
+                            <td className="px-2 py-2 font-mono">{activity.backupCode}</td>
+                            <td className="px-2 py-2">
+                              <span className={active ? "text-emerald-600" : "text-muted-foreground"}>
+                                {active ? "Active" : "Expired"}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSessionPayload(activity)
+                                    setEventCode(activity.eventCode)
+                                    setStatus({ tone: "success", message: `Loaded QR for ${activity.eventCode}.` })
+                                  }}
+                                >
+                                  View QR
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void downloadSessionQrAsImage(activity)}
+                                >
+                                  Image
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void downloadSessionQrAsPdf(activity)}
+                                >
+                                  PDF
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void downloadSessionAttendeesCsv(activity)}
+                                >
+                                  Attendees
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -771,7 +1003,7 @@ export function MemberQrScanner({
                   ref={manualCodeInputRef}
                   value={typedMemberCode}
                   onChange={(event) => setTypedMemberCode(event.target.value)}
-                  placeholder="e.g. DUM-AB12CD"
+                  placeholder="e.g. CODE-AB12CD"
                 />
               </div>
               <div className="flex gap-2">

@@ -5,6 +5,49 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 type Suggestion = { label: string; zip?: string; [k: string]: any }
+type CodeName = { code: string; name: string }
+
+function normalizeCodeNameList(rows: unknown): CodeName[] {
+  if (!Array.isArray(rows)) return []
+
+  const mapped = rows
+    .map((row) => {
+      const entry = row as Record<string, unknown>
+      const code = String(
+        entry.code ??
+          entry.id ??
+          entry.psgcCode ??
+          entry.regionCode ??
+          entry.provinceCode ??
+          entry.cityCode ??
+          ""
+      ).trim()
+      const name = String(
+        entry.name ??
+          entry.regionName ??
+          entry.provinceName ??
+          entry.cityName ??
+          entry.barangayName ??
+          ""
+      ).trim()
+
+      if (!code || !name) return null
+      return { code, name }
+    })
+    .filter((entry): entry is CodeName => Boolean(entry))
+
+  // Remove duplicates while preserving order
+  const seen = new Set<string>()
+  const unique: CodeName[] = []
+  for (const item of mapped) {
+    const dedupeKey = `${item.code}|${item.name}`
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    unique.push(item)
+  }
+
+  return unique
+}
 
 export default function PhilAddressAutocomplete({
   value,
@@ -22,11 +65,21 @@ export default function PhilAddressAutocomplete({
   const [query, setQuery] = React.useState(value.address ?? "")
   const [suggestions, setSuggestions] = React.useState<Suggestion[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [selectedRegion, setSelectedRegion] = React.useState<string | undefined>(undefined)
-  const [selectedProvince, setSelectedProvince] = React.useState<string | undefined>(undefined)
-  const [selectedCity, setSelectedCity] = React.useState<string | undefined>(undefined)
-  const [selectedBarangay, setSelectedBarangay] = React.useState<string | undefined>(undefined)
+  const [selectedRegionCode, setSelectedRegionCode] = React.useState<string>("")
+  const [selectedProvinceCode, setSelectedProvinceCode] = React.useState<string>("")
+  const [selectedCityCode, setSelectedCityCode] = React.useState<string>("")
+  const [selectedBarangayCode, setSelectedBarangayCode] = React.useState<string>("")
+  const [regionsList, setRegionsList] = React.useState<CodeName[]>([])
+  const [provincesList, setProvincesList] = React.useState<CodeName[]>([])
+  const [citiesList, setCitiesList] = React.useState<CodeName[]>([])
+  const [barangaysList, setBarangaysList] = React.useState<CodeName[]>([])
+  const [lookupError, setLookupError] = React.useState<string>("")
+
   const searchRef = React.useRef<((q: string) => Promise<Suggestion[]>) | null>(null)
+  const regionsRef = React.useRef<(() => Promise<CodeName[]>) | null>(null)
+  const provincesRef = React.useRef<((regionCode: string) => Promise<CodeName[]>) | null>(null)
+  const citiesRef = React.useRef<((provinceCode: string) => Promise<CodeName[]>) | null>(null)
+  const barangaysRef = React.useRef<((cityCode: string) => Promise<CodeName[]>) | null>(null)
   const timerRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
@@ -35,7 +88,13 @@ export default function PhilAddressAutocomplete({
     import("phil-address")
       .then((mod) => {
         // try common exported names
-        const fn = (mod && (mod.search || mod.autocomplete || mod.default || mod.suggest || mod.getSuggestions)) as any
+        const moduleExports = mod as unknown as Record<string, unknown>
+        const fn =
+          (moduleExports.search ??
+            moduleExports.autocomplete ??
+            moduleExports.default ??
+            moduleExports.suggest ??
+            moduleExports.getSuggestions) as ((query: string) => Promise<unknown>) | undefined
         if (mounted && typeof fn === "function") {
           searchRef.current = async (q: string) => {
             try {
@@ -68,25 +127,137 @@ export default function PhilAddressAutocomplete({
             }
             return []
           }
-          // attempt to prefetch a broad set for structured selects
-          ;(async () => {
+        }
+
+        const getRegions = moduleExports.regions as (() => Promise<CodeName[]>) | undefined
+        const getProvinces = moduleExports.provinces as
+          | ((regionCode: string) => Promise<CodeName[]>)
+          | undefined
+        const getCities = moduleExports.cities as
+          | ((provinceCode: string) => Promise<CodeName[]>)
+          | undefined
+        const getBarangays = moduleExports.barangays as
+          | ((cityCode: string) => Promise<CodeName[]>)
+          | undefined
+
+        if (typeof getRegions === "function") {
+          regionsRef.current = getRegions
+        }
+        if (typeof getProvinces === "function") {
+          provincesRef.current = getProvinces
+        }
+        if (typeof getCities === "function") {
+          citiesRef.current = getCities
+        }
+        if (typeof getBarangays === "function") {
+          barangaysRef.current = getBarangays
+        }
+
+        if (mounted && regionsRef.current) {
+          void (async () => {
             try {
-              const res = await (searchRef.current?.("") ?? [])
-              if (mounted) setSuggestions(Array.isArray(res) ? res.slice(0, 300) : [])
+              const regions = await regionsRef.current!()
+              if (!mounted) return
+              setRegionsList(normalizeCodeNameList(regions))
+              setLookupError("")
             } catch {
-              // ignore
+              if (!mounted) return
+              setRegionsList([])
+              setLookupError("Failed to load Philippine location options.")
             }
           })()
         }
       })
       .catch(() => {
         // phil-address not available or failed — leave searchRef null
+        if (mounted) {
+          setLookupError("Address lookup library failed to load.")
+        }
       })
 
     return () => {
       mounted = false
     }
   }, [])
+
+  React.useEffect(() => {
+    let mounted = true
+
+    async function loadProvinces() {
+      if (!selectedRegionCode || !provincesRef.current) {
+        setProvincesList([])
+        return
+      }
+
+      try {
+        const rows = await provincesRef.current(selectedRegionCode)
+        if (!mounted) return
+        setProvincesList(normalizeCodeNameList(rows))
+        setLookupError("")
+      } catch {
+        if (!mounted) return
+        setProvincesList([])
+      }
+    }
+
+    void loadProvinces()
+
+    return () => {
+      mounted = false
+    }
+  }, [selectedRegionCode])
+
+  React.useEffect(() => {
+    let mounted = true
+
+    async function loadCities() {
+      if (!selectedProvinceCode || !citiesRef.current) {
+        setCitiesList([])
+        return
+      }
+
+      try {
+        const rows = await citiesRef.current(selectedProvinceCode)
+        if (!mounted) return
+        setCitiesList(normalizeCodeNameList(rows))
+      } catch {
+        if (!mounted) return
+        setCitiesList([])
+      }
+    }
+
+    void loadCities()
+
+    return () => {
+      mounted = false
+    }
+  }, [selectedProvinceCode])
+
+  React.useEffect(() => {
+    let mounted = true
+
+    async function loadBarangays() {
+      if (!selectedCityCode || !barangaysRef.current) {
+        setBarangaysList([])
+        return
+      }
+
+      try {
+        const rows = await barangaysRef.current(selectedCityCode)
+        if (!mounted) return
+        setBarangaysList(normalizeCodeNameList(rows))
+      } catch {
+        if (!mounted) return
+        setBarangaysList([])
+      }
+    }
+
+    void loadBarangays()
+
+    return () => {
+      mounted = false
+    }
+  }, [selectedCityCode])
 
   React.useEffect(() => {
     // keep internal query in sync with prop
@@ -124,26 +295,19 @@ export default function PhilAddressAutocomplete({
   function handleSelect(s: Suggestion) {
     setQuery(s.label)
     setSuggestions([])
-    // if structured fields are present, set the selects
-    setSelectedRegion((s as any).region ?? undefined)
-    setSelectedProvince((s as any).province ?? undefined)
-    setSelectedCity((s as any).city ?? undefined)
-    setSelectedBarangay((s as any).barangay ?? undefined)
     onChange({ ...value, address: s.label, zip: s.zip ?? value.zip })
   }
 
   function composeAddressFromSelection() {
+    const selectedRegion = regionsList.find((entry) => entry.code === selectedRegionCode)?.name
+    const selectedProvince = provincesList.find((entry) => entry.code === selectedProvinceCode)?.name
+    const selectedCity = citiesList.find((entry) => entry.code === selectedCityCode)?.name
+    const selectedBarangay = barangaysList.find((entry) => entry.code === selectedBarangayCode)?.name
     const parts = [selectedBarangay, selectedCity, selectedProvince, selectedRegion].filter(Boolean)
     const addr = parts.join(", ")
-    // try to find a matching suggestion to obtain zip
-    const match = suggestions.find((s) => {
-      if (selectedRegion && s.region !== selectedRegion) return false
-      if (selectedProvince && s.province !== selectedProvince) return false
-      if (selectedCity && s.city !== selectedCity) return false
-      if (selectedBarangay && s.barangay !== selectedBarangay) return false
-      return true
-    })
-    onChange({ address: addr, zip: match?.zip ?? value.zip })
+
+    // Keep ZIP if user has set it manually; search match is optional.
+    onChange({ address: addr, zip: value.zip })
     setQuery(addr)
   }
 
@@ -168,17 +332,18 @@ export default function PhilAddressAutocomplete({
               <label className="block text-xs text-muted-foreground">Region</label>
               <select
                 className="w-full rounded border px-2 py-1"
-                value={selectedRegion ?? ""}
+                value={selectedRegionCode}
                 onChange={(e) => {
-                  setSelectedRegion(e.target.value || undefined)
-                  setSelectedProvince(undefined)
-                  setSelectedCity(undefined)
-                  setSelectedBarangay(undefined)
+                  const next = e.target.value
+                  setSelectedRegionCode(next)
+                  setSelectedProvinceCode("")
+                  setSelectedCityCode("")
+                  setSelectedBarangayCode("")
                 }}
               >
                 <option value="">— Select region —</option>
-                {Array.from(new Set(suggestions.map((s) => s.region).filter(Boolean))).map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                {regionsList.map((r, index) => (
+                  <option key={`${r.code}-${index}`} value={r.code}>{r.name}</option>
                 ))}
               </select>
             </div>
@@ -187,16 +352,18 @@ export default function PhilAddressAutocomplete({
               <label className="block text-xs text-muted-foreground">Province</label>
               <select
                 className="w-full rounded border px-2 py-1"
-                value={selectedProvince ?? ""}
+                value={selectedProvinceCode}
+                disabled={!selectedRegionCode}
                 onChange={(e) => {
-                  setSelectedProvince(e.target.value || undefined)
-                  setSelectedCity(undefined)
-                  setSelectedBarangay(undefined)
+                  const next = e.target.value
+                  setSelectedProvinceCode(next)
+                  setSelectedCityCode("")
+                  setSelectedBarangayCode("")
                 }}
               >
                 <option value="">— Select province —</option>
-                {Array.from(new Set(suggestions.filter((s) => !selectedRegion || s.region === selectedRegion).map((s) => s.province).filter(Boolean))).map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                {provincesList.map((p, index) => (
+                  <option key={`${p.code}-${index}`} value={p.code}>{p.name}</option>
                 ))}
               </select>
             </div>
@@ -205,15 +372,17 @@ export default function PhilAddressAutocomplete({
               <label className="block text-xs text-muted-foreground">City / Municipality</label>
               <select
                 className="w-full rounded border px-2 py-1"
-                value={selectedCity ?? ""}
+                value={selectedCityCode}
+                disabled={!selectedProvinceCode}
                 onChange={(e) => {
-                  setSelectedCity(e.target.value || undefined)
-                  setSelectedBarangay(undefined)
+                  const next = e.target.value
+                  setSelectedCityCode(next)
+                  setSelectedBarangayCode("")
                 }}
               >
                 <option value="">— Select city —</option>
-                {Array.from(new Set(suggestions.filter((s) => (!selectedRegion || s.region === selectedRegion) && (!selectedProvince || s.province === selectedProvince)).map((s) => s.city).filter(Boolean))).map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                {citiesList.map((c, index) => (
+                  <option key={`${c.code}-${index}`} value={c.code}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -222,12 +391,13 @@ export default function PhilAddressAutocomplete({
               <label className="block text-xs text-muted-foreground">Barangay</label>
               <select
                 className="w-full rounded border px-2 py-1"
-                value={selectedBarangay ?? ""}
-                onChange={(e) => setSelectedBarangay(e.target.value || undefined)}
+                value={selectedBarangayCode}
+                disabled={!selectedCityCode}
+                onChange={(e) => setSelectedBarangayCode(e.target.value)}
               >
                 <option value="">— Select barangay —</option>
-                {Array.from(new Set(suggestions.filter((s) => (!selectedRegion || s.region === selectedRegion) && (!selectedProvince || s.province === selectedProvince) && (!selectedCity || s.city === selectedCity)).map((s) => s.barangay).filter(Boolean))).map((b) => (
-                  <option key={b} value={b}>{b}</option>
+                {barangaysList.map((b, index) => (
+                  <option key={`${b.code}-${index}`} value={b.code}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -246,19 +416,22 @@ export default function PhilAddressAutocomplete({
               className="rounded border px-3 py-1"
               onClick={() => {
                 // clear structured selects
-                setSelectedRegion(undefined)
-                setSelectedProvince(undefined)
-                setSelectedCity(undefined)
-                setSelectedBarangay(undefined)
+                setSelectedRegionCode("")
+                setSelectedProvinceCode("")
+                setSelectedCityCode("")
+                setSelectedBarangayCode("")
               }}
             >
               Clear
             </button>
           </div>
 
-          {Array.from(new Set(suggestions.map((s) => s.region).filter(Boolean))).length === 0 && (
-            <div className="mt-2 text-xs text-muted-foreground">Type into the address field to populate region/province/city options, or leave blank.</div>
-          )}
+          {lookupError ? (
+            <div className="mt-2 text-xs text-destructive">{lookupError}</div>
+          ) : null}
+          {regionsList.length === 0 && !lookupError ? (
+            <div className="mt-2 text-xs text-muted-foreground">Loading Philippine region/province/city options...</div>
+          ) : null}
         </div>
       )}
 

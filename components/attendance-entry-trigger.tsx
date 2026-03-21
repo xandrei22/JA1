@@ -51,7 +51,7 @@ export function AttendanceEntryTrigger() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild id="attendance-entry-options-trigger">
         <Button type="button" size="icon" variant="outline" aria-label="Attendance entry options" title="Attendance entry options">
           <QrCode className="size-4" />
         </Button>

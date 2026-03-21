@@ -244,49 +244,83 @@ export function BranchBackupGenerator({ branchCode }: { branchCode: string }) {
         {isSuperAdmin && pendingRequests && pendingRequests.length > 0 ? (
           <div className="mt-6">
             <h4 className="text-md font-medium">Pending Branch Requests</h4>
-            <div className="mt-2 space-y-2">
-              {pendingRequests.map((r) => (
-                <div key={(r as any).id ?? r.branchCode} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <div className="font-medium">{r.name}</div>
-                    <div className="text-xs text-muted-foreground">{r.branchCode} • {r.leader}</div>
-                    <div className="text-xs text-muted-foreground">{r.address}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      disabled={approving === r.branchCode}
-                      onClick={() => approveRequest(r.branchCode ?? "")}
-                    >
-                      {approving === r.branchCode ? "Approving..." : "Approve"}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      disabled={approving === r.branchCode}
-                      onClick={() => rejectRequest(r.branchCode ?? "")}
-                    >
-                      {approving === r.branchCode ? "Processing..." : "Reject"}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-2 overflow-x-auto rounded-lg border">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="px-3 py-2">Branch Name</th>
+                    <th className="px-3 py-2">Branch Code</th>
+                    <th className="px-3 py-2">Leader</th>
+                    <th className="px-3 py-2">Address</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingRequests.map((r) => (
+                    <tr key={(r as any).id ?? r.branchCode} className="border-t align-top">
+                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.branchCode}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.leader}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.address}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={approving === r.branchCode}
+                            onClick={() => approveRequest(r.branchCode ?? "")}
+                          >
+                            {approving === r.branchCode ? "Approving..." : "Approve"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={approving === r.branchCode}
+                            onClick={() => rejectRequest(r.branchCode ?? "")}
+                          >
+                            {approving === r.branchCode ? "Processing..." : "Reject"}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : null}
 
         <div className="mt-4">
           <h4 className="text-md font-medium">Existing Branches</h4>
-          <div className="mt-2 space-y-2">
-            {branches.length === 0 && <div className="text-sm text-muted-foreground">No branches found.</div>}
-            {branches.map((b) => (
-              <div key={b.branchCode} className="flex items-center justify-between p-2 border rounded">
-                <div>
-                  <div className="font-medium">{b.name}</div>
-                  <div className="text-xs text-muted-foreground">{b.branchCode} • {b.leader}</div>
-                </div>
-                <div className="text-sm text-muted-foreground">{b.address}</div>
-              </div>
-            ))}
+          <div className="mt-2 overflow-x-auto rounded-lg border">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="px-3 py-2">Branch Name</th>
+                  <th className="px-3 py-2">Branch Code</th>
+                  <th className="px-3 py-2">Leader</th>
+                  <th className="px-3 py-2">Address</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branches.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-3 text-muted-foreground" colSpan={4}>
+                      No branches found.
+                    </td>
+                  </tr>
+                ) : (
+                  branches.map((b) => (
+                    <tr key={b.branchCode} className="border-t">
+                      <td className="px-3 py-2 font-medium">{b.name}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{b.branchCode}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{b.leader}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{b.address}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

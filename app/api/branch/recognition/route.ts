@@ -66,11 +66,7 @@ export async function POST(request: Request) {
 
   const branchCode = body.branchCode?.trim() || session.user.branchCode || "DUM"
   const branchName = body.branchName?.trim() || `JA1 ${branchCode.toUpperCase()}`
-  const note = body.note?.trim() ?? ""
-
-  if (!note) {
-    return NextResponse.json({ error: "Recognition note is required." }, { status: 400 })
-  }
+  const note = body.note?.trim() || `Recognition requested for ${branchName}.`
 
   if (!branchCode) {
     return NextResponse.json({ error: "Branch code is required." }, { status: 400 })

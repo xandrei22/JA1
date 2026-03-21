@@ -1,0 +1,11 @@
+[
+  {
+    "id": "01519dfb-0092-43f0-ae6b-428665b6271a",
+    "email": "ja1dumantay@gmail.com",
+    "password_hash": "506be2d724dcb8a1dc3d36ee99e4b26e:d5a9ca428368e6856e076b4f42b8f065afcf0843d961b91e6fc323aba4230ecb47f1cc664b9267d3ef322d5188c44f6aeaf27893503950f8f5c4eab32df30d8f",
+    "full_name": "Roma Samonte",
+    "branch_code": "DMNTY",
+    "role": "branch_admin",
+    "is_active": true
+  }
+]

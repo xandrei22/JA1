@@ -11,9 +11,11 @@ import { JourneyInvitationManager } from "@/components/journey-invitation-manage
 import { MemberCredentialIssuer } from "@/components/member-credential-issuer"
 import { MemberMonitorPanel } from "@/components/member-monitor-panel"
 import { MemberQrScanner } from "@/components/member-qr-scanner"
+import { BranchAdminManagerPanel } from "@/components/branch-admin-manager-panel"
 import { Button } from "@/components/ui/button"
 import { authOptions } from "@/lib/server/auth-options"
 import { getSuperAdminDashboardMetrics } from "@/lib/server/dashboard-metrics"
+import { isBranchActivated } from "@/lib/server/branch-governance-service"
 import {
   hasDirectJourneyAccess,
   hasPermission,
@@ -87,8 +89,15 @@ export default async function Page({ searchParams }: DashboardPageProps) {
   const canManageAnnouncements = hasPermission(role, PERMISSIONS.ANNOUNCEMENT_MANAGE)
   const canAccessJourney = hasPermission(role, PERMISSIONS.JOURNEY_ACCESS)
   const canInviteJourney = hasPermission(role, PERMISSIONS.JOURNEY_INVITE)
+  const canCreateAdmin = role === ROLES.VIP_CHAIRMAN
   const directJourneyAccess = hasDirectJourneyAccess(role)
   const isSuperAdmin = role === ROLES.VIP_CHAIRMAN
+  const isBranchScopedLeader =
+    role === ROLES.SUPERVISING_PASTOR || role === ROLES.BRANCH_ADMIN
+  const branchActivated = isBranchScopedLeader
+    ? await isBranchActivated(session.user.branchCode ?? "")
+    : true
+  const preApprovalLock = isBranchScopedLeader && !branchActivated
   const superAdminMetrics = isSuperAdmin
     ? await getSuperAdminDashboardMetrics()
     : null
@@ -102,23 +111,28 @@ export default async function Page({ searchParams }: DashboardPageProps) {
 
   const sectionPermissions: Record<string, boolean> = {
     dashboard: true,
-    "attendance-log": canLogAttendance,
-    "attendance-view": canViewAttendance,
-    "member-monitor": canMonitorMembers,
-    "age-compliance": canMonitorCompliance,
-    "member-management": canManageMembers,
-    "age-group-management": canManageAgeGroups,
-    "branch-management": canManageBranches,
+    "attendance-log": canLogAttendance && !preApprovalLock,
+    "attendance-view": canViewAttendance && !preApprovalLock,
+    "admin-management": canCreateAdmin,
+    "member-monitor": canMonitorMembers && !preApprovalLock,
+    "age-compliance": canMonitorCompliance && !preApprovalLock,
+    "member-management": canManageMembers && !preApprovalLock,
+    "age-group-management": canManageAgeGroups && !preApprovalLock,
+    "branch-management": canManageBranches && !preApprovalLock,
     "branch-recognition": canRequestBranchRecognition,
-    "branch-approvals": canApproveBranches,
-    "satellite-view": canViewSatellites,
-    "first-timers-view": canViewFirstTimers,
-    announcements: canViewAnnouncements,
-    settings: canManageSettings,
-    "system-controls": canManageSystem,
-    journey: canAccessJourney,
-    "journey-invitations": canInviteJourney,
+    "branch-approvals": canApproveBranches && !preApprovalLock,
+    "satellite-view": canViewSatellites && !preApprovalLock,
+    "first-timers-view": canViewFirstTimers && !preApprovalLock,
+    announcements: canViewAnnouncements && !preApprovalLock,
+    settings: canManageSettings && !preApprovalLock,
+    "system-controls": canManageSystem && !preApprovalLock,
+    journey: canAccessJourney && !preApprovalLock,
+    "journey-invitations": canInviteJourney && !preApprovalLock,
   }
+
+  const sidebarPermissions = preApprovalLock
+    ? [PERMISSIONS.BRANCH_RECOGNITION_REQUEST]
+    : allowedPermissions
 
   const isAllowedSection = sectionPermissions[section] ?? false
 
@@ -126,6 +140,7 @@ export default async function Page({ searchParams }: DashboardPageProps) {
     dashboard: "Dashboard",
     "attendance-log": "Attendance Log",
     "attendance-view": "Attendance Reports",
+    "admin-management": "Admin Management",
     "member-monitor": "Member Monitoring",
     "age-compliance": "Age Group Compliance",
     "member-management": "Member Management",
@@ -154,7 +169,7 @@ export default async function Page({ searchParams }: DashboardPageProps) {
           branchCode: session.user.branchCode,
           ageGroup: session.user.ageGroup,
         }}
-        permissions={allowedPermissions}
+        permissions={sidebarPermissions}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 justify-between px-4">
@@ -191,7 +206,9 @@ export default async function Page({ searchParams }: DashboardPageProps) {
             <div className="rounded-xl border bg-card p-5">
               <h3 className="font-semibold">Access Restricted</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Your current role does not have access to this section.
+                {preApprovalLock
+                  ? "Branch is not activated yet. Only Branch Recognition is available until super-admin approval."
+                  : "Your current role does not have access to this section."}
               </p>
             </div>
           ) : null}
@@ -218,8 +235,28 @@ export default async function Page({ searchParams }: DashboardPageProps) {
             </div>
           ) : null}
 
-          {isSuperAdmin && superAdminMetrics?.note ? (
+          {section === "dashboard" && isSuperAdmin && superAdminMetrics?.note ? (
             <p className="text-sm text-muted-foreground">{superAdminMetrics.note}</p>
+          ) : null}
+
+          {section === "dashboard" && !isSuperAdmin ? (
+            <div className="rounded-xl border bg-card p-5">
+              <h3 className="font-semibold">Your Available Features</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Open any module below based on your role permissions.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {canLogAttendance ? <Button size="sm" asChild><Link href="/dashboard?section=attendance-log">Attendance Log</Link></Button> : null}
+                {canViewAttendance ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=attendance-view">Attendance Reports</Link></Button> : null}
+                {canManageMembers ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=member-management">Member Management</Link></Button> : null}
+                {canCreateAdmin ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=admin-management">Admin Management</Link></Button> : null}
+                {canManageBranches ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=branch-management">Branch Management</Link></Button> : null}
+                {canManageAgeGroups ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=age-group-management">Age Groups</Link></Button> : null}
+                {canManageAnnouncements || canViewAnnouncements ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=announcements">Announcements</Link></Button> : null}
+                {canInviteJourney ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=journey-invitations">Journey Invitations</Link></Button> : null}
+                {canAccessJourney ? <Button size="sm" variant="outline" asChild><Link href="/dashboard?section=journey">Journey</Link></Button> : null}
+              </div>
+            </div>
           ) : null}
 
           {section === "attendance-log" && canLogAttendance ? (
@@ -244,6 +281,10 @@ export default async function Page({ searchParams }: DashboardPageProps) {
 
           {section === "member-management" && canManageMembers ? (
             <MemberCredentialIssuer branchCode={session.user.branchCode ?? "DUM"} />
+          ) : null}
+
+          {section === "admin-management" && canCreateAdmin ? (
+            <BranchAdminManagerPanel branchCode={session.user.branchCode ?? "DUM"} />
           ) : null}
 
           {section === "age-group-management" && canManageAgeGroups ? (

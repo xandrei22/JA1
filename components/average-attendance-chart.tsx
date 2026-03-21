@@ -42,7 +42,7 @@ export function AverageAttendanceChart({
       <p className="mt-1 text-sm text-muted-foreground">
         Main church versus all branches average unique attendees per event.
       </p>
-      <ChartContainer config={chartConfig} className="mt-4 min-h-[240px] w-full">
+      <ChartContainer id="average-attendance" config={chartConfig} className="mt-4 min-h-[240px] w-full">
         <BarChart accessibilityLayer data={chartData} margin={{ top: 16, left: 8, right: 8 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} tickMargin={10} axisLine={false} />

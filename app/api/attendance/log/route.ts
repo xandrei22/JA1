@@ -29,6 +29,8 @@ export async function GET(request: Request) {
 
   const startDate = url.searchParams.get("start") ?? undefined
   const endDate = url.searchParams.get("end") ?? undefined
+  const startTime = url.searchParams.get("startTime") ?? undefined
+  const endTime = url.searchParams.get("endTime") ?? undefined
   const eventQuery = url.searchParams.get("event") ?? undefined
   const exportFormat = url.searchParams.get("export") ?? undefined
 
@@ -37,6 +39,8 @@ export async function GET(request: Request) {
     limit: Number.isFinite(limitParam) ? limitParam : 20,
     startDate,
     endDate,
+    startTime,
+    endTime,
     eventQuery,
   }
 

@@ -1,0 +1,27 @@
+{
+  "files.associations": {
+    "db/migrations/*.sql": "plaintext",
+    "**/db/migrations/*.sql": "plaintext",
+    "db/migrations/**/*.sql": "plaintext"
+  },
+  "mssql.intelliSense.enableErrorChecking": false,
+  "mssql.linting.enabled": false,
+  "sql.linting.enabled": false,
+  "[plaintext]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": null,
+    "editor.codeActionsOnSave": {}
+  },
+  "[sql]": {
+    "editor.defaultFormatter": null,
+    "editor.codeActionsOnSave": {}
+  },
+  "search.exclude": {
+    "db/migrations/**": true,
+    "**/db/migrations/**": true
+  },
+  "problems.exclude": {
+    "**/db/migrations/**": true
+  }
+}
+

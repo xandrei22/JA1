@@ -49,25 +49,29 @@ export async function createBranchIfMissing(input: {
   const branchName = (input.branchName?.trim() || defaultBranchName(branchCode)).slice(0, 120)
 
   if (isSupabaseConfigured()) {
-    const existing = await selectSupabaseSingle<{ id: string; branch_code: string; branch_name: string }>(
-      "branches",
-      { branch_code: branchCode }
-    )
+    try {
+      const existing = await selectSupabaseSingle<{ id: string; branch_code: string; branch_name: string }>(
+        "branches",
+        { branch_code: branchCode }
+      )
 
-    if (existing) {
-      return {
-        branchCode: existing.branch_code,
-        branchName: existing.branch_name,
-        created: false,
+      if (existing) {
+        return {
+          branchCode: existing.branch_code,
+          branchName: existing.branch_name,
+          created: false,
+        }
       }
+
+      await insertSupabaseRow("branches", {
+        branch_code: branchCode,
+        branch_name: branchName,
+      })
+
+      return { branchCode, branchName, created: true }
+    } catch {
+      // fall through to in-memory fallback when Supabase is unreachable/misconfigured
     }
-
-    await insertSupabaseRow("branches", {
-      branch_code: branchCode,
-      branch_name: branchName,
-    })
-
-    return { branchCode, branchName, created: true }
   }
 
   const existing = inMemoryBranches.get(branchCode)
@@ -98,20 +102,25 @@ export async function createBranchRecognitionRequest(input: {
   }
 
   if (isSupabaseConfigured()) {
-    await insertSupabaseRow("branch_recognition_requests", {
-      id: request.id,
-      branch_code: request.branchCode,
-      requested_by_user_id: request.requestedByUserId,
-      requested_by_role: request.requestedByRole,
-      note: request.note,
-      status: request.status,
-      created_at: request.createdAt,
-      approved_by_user_id: request.approvedByUserId,
-      approved_at: request.approvedAt,
-    })
-  } else {
-    inMemoryRecognition.push(request)
+    try {
+      await insertSupabaseRow("branch_recognition_requests", {
+        id: request.id,
+        branch_code: request.branchCode,
+        requested_by_user_id: request.requestedByUserId,
+        requested_by_role: request.requestedByRole,
+        note: request.note,
+        status: request.status,
+        created_at: request.createdAt,
+        approved_by_user_id: request.approvedByUserId,
+        approved_at: request.approvedAt,
+      })
+      return request
+    } catch {
+      // fall through to in-memory fallback when Supabase insert fails
+    }
   }
+
+  inMemoryRecognition.push(request)
 
   return request
 }
@@ -121,39 +130,43 @@ export async function listBranchRecognitionRequests(input: {
   status?: BranchRecognitionStatus
 }): Promise<BranchRecognitionRequest[]> {
   if (isSupabaseConfigured()) {
-    const filters: Record<string, string | number | boolean> = {}
-    if (input.branchCode) filters.branch_code = input.branchCode.toUpperCase()
-    if (input.status) filters.status = input.status
+    try {
+      const filters: Record<string, string | number | boolean> = {}
+      if (input.branchCode) filters.branch_code = input.branchCode.toUpperCase()
+      if (input.status) filters.status = input.status
 
-    const rows = await selectSupabaseRows<{
-      id: string
-      branch_code: string
-      requested_by_user_id: string
-      requested_by_role: string
-      note: string
-      status: BranchRecognitionStatus
-      created_at: string
-      approved_by_user_id: string | null
-      approved_at: string | null
-    }>({
-      table: "branch_recognition_requests",
-      filters,
-      limit: 200,
-      orderBy: "created_at",
-      ascending: false,
-    })
+      const rows = await selectSupabaseRows<{
+        id: string
+        branch_code: string
+        requested_by_user_id: string
+        requested_by_role: string
+        note: string
+        status: BranchRecognitionStatus
+        created_at: string
+        approved_by_user_id: string | null
+        approved_at: string | null
+      }>({
+        table: "branch_recognition_requests",
+        filters,
+        limit: 200,
+        orderBy: "created_at",
+        ascending: false,
+      })
 
-    return rows.map((row) => ({
-      id: row.id,
-      branchCode: row.branch_code,
-      requestedByUserId: row.requested_by_user_id,
-      requestedByRole: row.requested_by_role,
-      note: row.note,
-      status: row.status,
-      createdAt: row.created_at,
-      approvedByUserId: row.approved_by_user_id,
-      approvedAt: row.approved_at,
-    }))
+      return rows.map((row) => ({
+        id: row.id,
+        branchCode: row.branch_code,
+        requestedByUserId: row.requested_by_user_id,
+        requestedByRole: row.requested_by_role,
+        note: row.note,
+        status: row.status,
+        createdAt: row.created_at,
+        approvedByUserId: row.approved_by_user_id,
+        approvedAt: row.approved_at,
+      }))
+    } catch {
+      // fall through to in-memory fallback when Supabase read fails
+    }
   }
 
   return inMemoryRecognition
@@ -169,46 +182,50 @@ export async function approveBranchRecognitionRequest(input: {
   const approvedAt = new Date().toISOString()
 
   if (isSupabaseConfigured()) {
-    const updated = await updateSupabaseRows<{
-      id: string
-      branch_code: string
-      requested_by_user_id: string
-      requested_by_role: string
-      note: string
-      status: BranchRecognitionStatus
-      created_at: string
-      approved_by_user_id: string | null
-      approved_at: string | null
-    }>({
-      table: "branch_recognition_requests",
-      filters: { id: input.requestId },
-      payload: {
-        status: "approved",
-        approved_by_user_id: input.approvedByUserId,
-        approved_at: approvedAt,
-      },
-    })
+    try {
+      const updated = await updateSupabaseRows<{
+        id: string
+        branch_code: string
+        requested_by_user_id: string
+        requested_by_role: string
+        note: string
+        status: BranchRecognitionStatus
+        created_at: string
+        approved_by_user_id: string | null
+        approved_at: string | null
+      }>({
+        table: "branch_recognition_requests",
+        filters: { id: input.requestId },
+        payload: {
+          status: "approved",
+          approved_by_user_id: input.approvedByUserId,
+          approved_at: approvedAt,
+        },
+      })
 
-    const row = updated[0]
-    if (!row) {
-      throw new Error("Request not found.")
-    }
+      const row = updated[0]
+      if (!row) {
+        throw new Error("Request not found.")
+      }
 
-    await createBranchIfMissing({
-      branchCode: row.branch_code,
-      branchName: defaultBranchName(row.branch_code),
-    })
+      await createBranchIfMissing({
+        branchCode: row.branch_code,
+        branchName: defaultBranchName(row.branch_code),
+      })
 
-    return {
-      id: row.id,
-      branchCode: row.branch_code,
-      requestedByUserId: row.requested_by_user_id,
-      requestedByRole: row.requested_by_role,
-      note: row.note,
-      status: row.status,
-      createdAt: row.created_at,
-      approvedByUserId: row.approved_by_user_id,
-      approvedAt: row.approved_at,
+      return {
+        id: row.id,
+        branchCode: row.branch_code,
+        requestedByUserId: row.requested_by_user_id,
+        requestedByRole: row.requested_by_role,
+        note: row.note,
+        status: row.status,
+        createdAt: row.created_at,
+        approvedByUserId: row.approved_by_user_id,
+        approvedAt: row.approved_at,
+      }
+    } catch {
+      // fall through to in-memory fallback when Supabase update fails
     }
   }
 
@@ -300,4 +317,38 @@ export async function listBranchAnnouncements(input: {
   return inMemoryAnnouncements
     .filter((entry) => (input.branchCode ? entry.branchCode === input.branchCode.toUpperCase() : true))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}
+
+export async function isBranchActivated(branchCode: string): Promise<boolean> {
+  const normalizedBranchCode = branchCode.trim().toUpperCase()
+  if (!normalizedBranchCode) return false
+
+  if (isSupabaseConfigured()) {
+    try {
+      const branch = await selectSupabaseSingle<{ id: string }>("branches", {
+        branch_code: normalizedBranchCode,
+      })
+      if (branch) return true
+
+      const approvedRequest = await selectSupabaseSingle<{ id: string }>(
+        "branch_recognition_requests",
+        {
+          branch_code: normalizedBranchCode,
+          status: "approved",
+        }
+      )
+
+      return Boolean(approvedRequest)
+    } catch {
+      // Fall through to in-memory checks.
+    }
+  }
+
+  if (inMemoryBranches.has(normalizedBranchCode)) return true
+
+  return inMemoryRecognition.some(
+    (entry) =>
+      entry.branchCode === normalizedBranchCode &&
+      entry.status === "approved"
+  )
 }

@@ -12,6 +12,10 @@ import {
   selectSupabaseSingle,
   selectSupabaseRows,
 } from "@/lib/server/supabase-admin"
+import {
+  addLocalAttendanceSession,
+  listLocalAttendanceSessions,
+} from "@/lib/server/local-attendance-sessions"
 
 export type MemberCredential = {
   memberId: string
@@ -47,7 +51,8 @@ export type AttendanceSessionInput = {
   eventName: string
   eventPlace: string
   eventDate: string
-  eventTime: string
+  eventStartTime: string
+  eventEndTime: string
   createdByUserId: string
 }
 
@@ -57,7 +62,8 @@ export type AttendanceSessionResult = {
   eventName: string
   eventPlace: string
   eventDate: string
-  eventTime: string
+  eventStartTime: string
+  eventEndTime: string
   backupCode: string
   qrPayload: string
   generatedAt: string
@@ -129,20 +135,24 @@ export async function logAttendance(input: AttendanceLogInput) {
   }
 
   if (isSupabaseConfigured()) {
-    const inserted = await insertSupabaseRow("attendance_logs", {
-      member_id: input.memberId,
-      event_code: input.eventCode,
-      branch_code: input.branchCode,
-      method: input.method,
-      source_code: input.sourceCode,
-      logged_by_user_id: input.loggedByUserId,
-      logged_at: loggedAt,
-    })
+    try {
+      const inserted = await insertSupabaseRow("attendance_logs", {
+        member_id: input.memberId,
+        event_code: input.eventCode,
+        branch_code: input.branchCode,
+        method: input.method,
+        source_code: input.sourceCode,
+        logged_by_user_id: input.loggedByUserId,
+        logged_at: loggedAt,
+      })
 
-    return {
-      loggedAt,
-      persisted: true,
-      record: inserted,
+      return {
+        loggedAt,
+        persisted: true,
+        record: inserted,
+      }
+    } catch {
+      // Fall back to in-memory storage so the current session can still see attendance history.
     }
   }
 
@@ -162,7 +172,7 @@ export async function logAttendance(input: AttendanceLogInput) {
     record: {
       ...input,
       loggedAt,
-      note: "Supabase not configured. Data was validated but not persisted.",
+      note: "Supabase unavailable. Data is kept in memory for this server session.",
     },
   }
 }
@@ -172,54 +182,55 @@ export async function listAttendanceLogs(input: {
   limit?: number
   startDate?: string
   endDate?: string
+  startTime?: string
+  endTime?: string
   eventQuery?: string
 }) {
   const limit = Math.max(1, Math.min(input.limit ?? 20, 100))
+  const startBoundary = input.startDate
+    ? new Date(`${input.startDate}T${input.startTime ?? "00:00"}:00Z`).getTime()
+    : null
+  const endBoundary = input.endDate
+    ? new Date(`${input.endDate}T${input.endTime ?? "23:59"}:59Z`).getTime()
+    : null
 
   if (isSupabaseConfigured()) {
-    // build supabase REST query with operators for range and ilike
-    const params = new URLSearchParams({
-      select: "*",
-      limit: String(limit),
-      order: "logged_at.desc",
+    const rows = await selectSupabaseRows<{
+      member_id: string
+      event_code: string
+      branch_code: string
+      method: AttendanceMethod
+      source_code: string
+      logged_by_user_id: string
+      logged_at: string
+    }>({
+      table: "attendance_logs",
+      filters: { branch_code: input.branchCode },
+      limit: 500,
+      orderBy: "logged_at",
+      ascending: false,
     })
 
-    // branch filter
-    params.set("branch_code", `eq.${input.branchCode}`)
+    let filteredRows = rows
 
-    // event query (case-insensitive)
     if (input.eventQuery && input.eventQuery.trim()) {
-      params.set("event_code", `ilike.*${input.eventQuery.trim()}*`)
+      const q = input.eventQuery.trim().toLowerCase()
+      filteredRows = filteredRows.filter((row) => String(row.event_code).toLowerCase().includes(q))
     }
 
-    // date range filters (expect YYYY-MM-DD)
-    if (input.startDate) {
-      const start = `${input.startDate}T00:00:00Z`
-      params.set("logged_at", `gte.${start}`)
-    }
-    if (input.endDate) {
-      const end = `${input.endDate}T23:59:59Z`
-      // if logged_at already has a gte filter, we append lte as additional param by using 'logged_at=gte.xxx&logged_at=lte.yyy'
-      // URLSearchParams will overwrite, so add as another key by using append
-      params.append("logged_at", `lte.${end}`)
+    if (startBoundary !== null) {
+      filteredRows = filteredRows.filter((row) => new Date(row.logged_at).getTime() >= startBoundary)
     }
 
-    const response = await fetch(`${endpoint("attendance_logs")}?${params.toString()}`, {
-      method: "GET",
-      headers: getHeaders(),
-      cache: "no-store",
-    })
-
-    if (!response.ok) {
-      const details = await response.text()
-      throw new Error(`Supabase select failed (${response.status}): ${details}`)
+    if (endBoundary !== null) {
+      filteredRows = filteredRows.filter((row) => new Date(row.logged_at).getTime() <= endBoundary)
     }
 
-    const rows = (await response.json()) as any[]
+    filteredRows = filteredRows.slice(0, limit)
 
     return {
       persisted: true,
-      records: rows.map((row) => ({
+      records: filteredRows.map((row) => ({
         memberId: row.member_id,
         eventCode: row.event_code,
         branchCode: row.branch_code,
@@ -238,13 +249,11 @@ export async function listAttendanceLogs(input: {
     records = records.filter((r) => r.eventCode.toLowerCase().includes(q))
   }
 
-  if (input.startDate) {
-    const s = new Date(`${input.startDate}T00:00:00Z`).getTime()
-    records = records.filter((r) => new Date(r.loggedAt).getTime() >= s)
+  if (startBoundary !== null) {
+    records = records.filter((r) => new Date(r.loggedAt).getTime() >= startBoundary)
   }
-  if (input.endDate) {
-    const e = new Date(`${input.endDate}T23:59:59Z`).getTime()
-    records = records.filter((r) => new Date(r.loggedAt).getTime() <= e)
+  if (endBoundary !== null) {
+    records = records.filter((r) => new Date(r.loggedAt).getTime() <= endBoundary)
   }
 
   records = records.sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime()).slice(0, limit)
@@ -259,59 +268,63 @@ export async function listMemberAttendanceLogs(input: { memberId: string; limit?
   const limit = Math.max(1, Math.min(input.limit ?? 20, 100))
 
   if (isSupabaseConfigured()) {
-    // Accept either a UUID member id or a member_no (legacy numeric/member number).
-    let memberIdToUse = input.memberId
+    try {
+      // Accept either a UUID member id or a member_no (legacy numeric/member number).
+      let memberIdToUse = input.memberId
 
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(memberIdToUse)) {
-      // try resolving via member_no
-      const memberRow = await selectSupabaseSingle<{ id: string }>("members", {
-        member_no: memberIdToUse,
-      })
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(memberIdToUse)) {
+        // try resolving via member_no
+        const memberRow = await selectSupabaseSingle<{ id: string }>("members", {
+          member_no: memberIdToUse,
+        })
 
-      if (memberRow?.id) {
-        memberIdToUse = memberRow.id
-      } else {
-        // No matching member found — return empty set
-        return {
-          persisted: true,
-          records: [],
+        if (memberRow?.id) {
+          memberIdToUse = memberRow.id
+        } else {
+          // No matching member found — return empty set
+          return {
+            persisted: true,
+            records: [],
+          }
         }
       }
-    }
 
-    const rows = await selectSupabaseRows<{
-      member_id: string
-      event_code: string
-      branch_code: string
-      method: AttendanceMethod
-      source_code: string
-      logged_by_user_id: string
-      logged_at: string
-    }>({
-      table: "attendance_logs",
-      filters: { member_id: memberIdToUse },
-      limit,
-      orderBy: "logged_at",
-      ascending: false,
-    })
+      const rows = await selectSupabaseRows<{
+        member_id: string
+        event_code: string
+        branch_code: string
+        method: AttendanceMethod
+        source_code: string
+        logged_by_user_id: string
+        logged_at: string
+      }>({
+        table: "attendance_logs",
+        filters: { member_id: memberIdToUse },
+        limit,
+        orderBy: "logged_at",
+        ascending: false,
+      })
 
-    return {
-      persisted: true,
-      records: rows.map((row) => ({
-        memberId: row.member_id,
-        eventCode: row.event_code,
-        branchCode: row.branch_code,
-        method: row.method,
-        sourceCode: row.source_code,
-        loggedByUserId: row.logged_by_user_id,
-        loggedAt: row.logged_at,
-      })),
+      return {
+        persisted: true,
+        records: rows.map((row) => ({
+          memberId: row.member_id,
+          eventCode: row.event_code,
+          branchCode: row.branch_code,
+          method: row.method,
+          sourceCode: row.source_code,
+          loggedByUserId: row.logged_by_user_id,
+          loggedAt: row.logged_at,
+        })),
+      }
+    } catch {
+      // Fall back to in-memory records when Supabase is unreachable.
     }
   }
 
   const records = inMemoryAttendanceLogs
-    .filter((record) => record.memberId === input.memberId)
+    .filter((record) => record.memberId === input.memberId || record.loggedByUserId === input.memberId)
     .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())
     .slice(0, limit)
 
@@ -326,15 +339,19 @@ export async function getMemberNameById(memberId: string): Promise<string | null
     return null
   }
 
-  const member = await selectSupabaseSingle<SupabaseMemberRow>("members", {
-    id: memberId,
-  })
+  try {
+    const member = await selectSupabaseSingle<SupabaseMemberRow>("members", {
+      id: memberId,
+    })
 
-  if (!member?.full_name) {
+    if (!member?.full_name) {
+      return null
+    }
+
+    return member.full_name
+  } catch {
     return null
   }
-
-  return member.full_name
 }
 
 export async function resolveMemberIdByCredentialCode(code: string): Promise<string | null> {
@@ -400,7 +417,8 @@ export async function createAttendanceSession(
     eventName: input.eventName,
     eventPlace: input.eventPlace,
     eventDate: input.eventDate,
-    eventTime: input.eventTime,
+    eventStartTime: input.eventStartTime,
+    eventEndTime: input.eventEndTime,
     equivalentCode: backupCode,
   })
 
@@ -415,51 +433,64 @@ export async function createAttendanceSession(
           event_code: eventCode,
           title: input.eventName,
           branch_id: branch.id,
-          starts_at: `${input.eventDate}T${input.eventTime}:00Z`,
+          starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
           created_by: input.createdByUserId,
         })
 
-        return {
+        const result: AttendanceSessionResult = {
           branchCode: input.branchCode,
           eventCode,
           eventName: input.eventName,
           eventPlace: input.eventPlace,
           eventDate: input.eventDate,
-          eventTime: input.eventTime,
+          eventStartTime: input.eventStartTime,
+          eventEndTime: input.eventEndTime,
           backupCode,
           qrPayload,
           generatedAt,
           persisted: true,
         }
+
+        inMemoryAttendanceSessions.push(result)
+        await addLocalAttendanceSession(result)
+        return result
       }
 
-      return {
+      const result: AttendanceSessionResult = {
         branchCode: input.branchCode,
         eventCode,
         eventName: input.eventName,
         eventPlace: input.eventPlace,
         eventDate: input.eventDate,
-        eventTime: input.eventTime,
+        eventStartTime: input.eventStartTime,
+        eventEndTime: input.eventEndTime,
         backupCode,
         qrPayload,
         generatedAt,
         persisted: false,
         note: "Branch record not found in events table. Session code was still generated.",
       }
+      inMemoryAttendanceSessions.push(result)
+      await addLocalAttendanceSession(result)
+      return result
     } catch {
-      return {
+      const result: AttendanceSessionResult = {
         branchCode: input.branchCode,
         eventCode,
         eventName: input.eventName,
         eventPlace: input.eventPlace,
         eventDate: input.eventDate,
-        eventTime: input.eventTime,
+        eventStartTime: input.eventStartTime,
+        eventEndTime: input.eventEndTime,
         backupCode,
         qrPayload,
         generatedAt,
         persisted: false,
         note: "Event persistence failed. Session code was still generated.",
       }
+      inMemoryAttendanceSessions.push(result)
+      await addLocalAttendanceSession(result)
+      return result
     }
   }
 
@@ -469,7 +500,8 @@ export async function createAttendanceSession(
     eventName: input.eventName,
     eventPlace: input.eventPlace,
     eventDate: input.eventDate,
-    eventTime: input.eventTime,
+    eventStartTime: input.eventStartTime,
+    eventEndTime: input.eventEndTime,
     backupCode,
     qrPayload,
     generatedAt,
@@ -477,8 +509,24 @@ export async function createAttendanceSession(
   }
 
   inMemoryAttendanceSessions.push(session)
+  await addLocalAttendanceSession(session)
 
   return session
+}
+
+export async function listAttendanceSessions(input: { branchCode: string; limit?: number }) {
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 200))
+  const localSessions = await listLocalAttendanceSessions(input.branchCode, limit)
+  if (localSessions.length > 0) {
+    return localSessions
+  }
+
+  const fallback = inMemoryAttendanceSessions
+    .filter((entry) => entry.branchCode.toUpperCase() === input.branchCode.toUpperCase())
+    .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime())
+    .slice(0, limit)
+
+  return fallback
 }
 
 export async function getLatestAttendanceSession(branchCode: string): Promise<AttendanceSessionResult | null> {
@@ -514,7 +562,8 @@ export async function getLatestAttendanceSession(branchCode: string): Promise<At
           eventName: ev.title,
           eventPlace: branchCode,
           eventDate: datePart ?? "",
-          eventTime: time ?? "",
+          eventStartTime: time ?? "",
+          eventEndTime: "",
           backupCode: "",
           qrPayload: "",
           generatedAt: new Date().toISOString(),

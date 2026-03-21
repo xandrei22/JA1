@@ -41,7 +41,8 @@ export function buildSessionQrPayload(input: {
   eventName: string
   eventPlace: string
   eventDate: string
-  eventTime: string
+  eventStartTime: string
+  eventEndTime: string
   equivalentCode: string
 }): string {
   return JSON.stringify({
@@ -51,7 +52,10 @@ export function buildSessionQrPayload(input: {
     eventName: input.eventName,
     eventPlace: input.eventPlace,
     eventDate: input.eventDate,
-    eventTime: input.eventTime,
+    eventStartTime: input.eventStartTime,
+    eventEndTime: input.eventEndTime,
+    // Backward compatibility for older clients that still read eventTime.
+    eventTime: input.eventStartTime,
     equivalentCode: input.equivalentCode,
     issuedAt: new Date().toISOString(),
   })

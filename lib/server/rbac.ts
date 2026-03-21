@@ -87,11 +87,17 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.JOURNEY_ACCESS,
   ],
   [ROLES.BRANCH_ADMIN]: [
+    PERMISSIONS.BRANCH_MANAGE,
     PERMISSIONS.ATTENDANCE_LOG,
     PERMISSIONS.ATTENDANCE_VIEW,
     PERMISSIONS.MEMBER_MONITOR,
     PERMISSIONS.MEMBER_MANAGE,
+    PERMISSIONS.AGE_GROUP_MANAGE,
+    PERMISSIONS.AGE_GROUP_COMPLIANCE_MONITOR,
+    PERMISSIONS.SATELLITE_VIEW,
+    PERMISSIONS.FIRST_TIMER_VIEW,
     PERMISSIONS.ANNOUNCEMENT_VIEW,
+    PERMISSIONS.ANNOUNCEMENT_MANAGE,
     PERMISSIONS.JOURNEY_INVITE,
     PERMISSIONS.JOURNEY_ACCESS,
     PERMISSIONS.BRANCH_RECOGNITION_REQUEST,
@@ -112,20 +118,33 @@ const ROLE_HIERARCHY: Role[] = [
   ROLES.MEMBER,
 ]
 
+export function normalizeOperationalRole(role: Role): Role {
+  // Ministry rule: branch admin operates as supervising pastor for permissions.
+  if (role === ROLES.BRANCH_ADMIN) {
+    return ROLES.SUPERVISING_PASTOR
+  }
+
+  return role
+}
+
 export function hasPermission(role: Role, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false
+  const effectiveRole = normalizeOperationalRole(role)
+  return ROLE_PERMISSIONS[effectiveRole]?.includes(permission) ?? false
 }
 
 export function canManageRole(actor: Role, target: Role): boolean {
-  return ROLE_HIERARCHY.indexOf(actor) <= ROLE_HIERARCHY.indexOf(target)
+  const actorRole = normalizeOperationalRole(actor)
+  const targetRole = normalizeOperationalRole(target)
+  return ROLE_HIERARCHY.indexOf(actorRole) <= ROLE_HIERARCHY.indexOf(targetRole)
 }
 
 export function hasDirectJourneyAccess(role: Role): boolean {
+  const effectiveRole = normalizeOperationalRole(role)
   return (
-    role === ROLES.VIP_CHAIRMAN ||
-    role === ROLES.SUPERVISING_PASTOR ||
-    role === ROLES.AGE_GROUP_CHAIRMAN ||
-    role === ROLES.AGE_GROUP_LEADER
+    effectiveRole === ROLES.VIP_CHAIRMAN ||
+    effectiveRole === ROLES.SUPERVISING_PASTOR ||
+    effectiveRole === ROLES.AGE_GROUP_CHAIRMAN ||
+    effectiveRole === ROLES.AGE_GROUP_LEADER
   )
 }
 

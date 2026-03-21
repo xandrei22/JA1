@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 type AttendanceRecord = {
   memberId: string
@@ -18,7 +18,9 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
   const [eventFilter, setEventFilter] = useState("")
   const [startDate, setStartDate] = useState<string | null>(null)
   const [endDate, setEndDate] = useState<string | null>(null)
-  const [message, setMessage] = useState("Load recent attendance logs.")
+  const [startTime, setStartTime] = useState<string | null>(null)
+  const [endTime, setEndTime] = useState<string | null>(null)
+  const [message, setMessage] = useState("Loading attendance logs...")
 
   const loadRecords = useCallback(async () => {
     setIsLoading(true)
@@ -31,6 +33,8 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
     if (eventFilter.trim()) params.set("event", eventFilter.trim())
     if (startDate) params.set("start", startDate)
     if (endDate) params.set("end", endDate)
+    if (startTime) params.set("startTime", startTime)
+    if (endTime) params.set("endTime", endTime)
 
     const response = await fetch(`/api/attendance/log?${params.toString()}`, {
       method: "GET",
@@ -53,6 +57,11 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
     setMessage(
       payload.note ?? `Loaded ${(payload.records ?? []).length} attendance logs.`
     )
+  }, [branchCode, eventFilter, startDate, endDate, startTime, endTime])
+
+  // Load initial data on mount
+  useEffect(() => {
+    loadRecords()
   }, [branchCode])
 
   const downloadCsv = useCallback(async () => {
@@ -62,6 +71,8 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
       if (eventFilter.trim()) params.set("event", eventFilter.trim())
       if (startDate) params.set("start", startDate)
       if (endDate) params.set("end", endDate)
+      if (startTime) params.set("startTime", startTime)
+      if (endTime) params.set("endTime", endTime)
 
       const res = await fetch(`/api/attendance/log?${params.toString()}`)
       if (!res.ok) {
@@ -85,7 +96,7 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
     } finally {
       setIsLoading(false)
     }
-  }, [branchCode, eventFilter, startDate, endDate])
+  }, [branchCode, eventFilter, startDate, endDate, startTime, endTime])
 
   const filtered = records.filter((record) =>
     eventFilter.trim()
@@ -127,6 +138,14 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
         <div>
           <p className="mb-1 text-sm font-medium">End Date</p>
           <Input type="date" value={endDate ?? ""} onChange={(e) => setEndDate(e.target.value || null)} />
+        </div>
+        <div>
+          <p className="mb-1 text-sm font-medium">Start Time</p>
+          <Input type="time" value={startTime ?? ""} onChange={(e) => setStartTime(e.target.value || null)} />
+        </div>
+        <div>
+          <p className="mb-1 text-sm font-medium">End Time</p>
+          <Input type="time" value={endTime ?? ""} onChange={(e) => setEndTime(e.target.value || null)} />
         </div>
       </div>
 

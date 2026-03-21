@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 
 export default function GlobalMemberScanner() {
   const [branchCode, setBranchCode] = useState<string | null>(null)
@@ -44,8 +44,7 @@ export default function GlobalMemberScanner() {
       // dynamically import scanner component when needed
       if (!ScannerComp) {
         import("./member-qr-scanner").then((mod) => {
-          // prefer named export, fallback to default
-          setScannerComp(mod.MemberQrScanner ?? mod.default ?? mod)
+          setScannerComp(() => mod.MemberQrScanner ?? mod.default ?? mod)
         })
       }
     }
@@ -55,7 +54,7 @@ export default function GlobalMemberScanner() {
       setMountedScanner(true)
       if (!ScannerComp) {
         import("./member-qr-scanner").then((mod) => {
-          setScannerComp(mod.MemberQrScanner ?? mod.default ?? mod)
+          setScannerComp(() => mod.MemberQrScanner ?? mod.default ?? mod)
         })
       }
     }
@@ -74,13 +73,13 @@ export default function GlobalMemberScanner() {
 
   return (
     <>
-      {mountedScanner && ScannerComp ? (
-        <ScannerComp
-          branchCode={branchCode ?? "DUM"}
-          defaultMemberName={name ?? ""}
-          initialEntryOption={initialEntry}
-        />
-      ) : null}
+      {mountedScanner && ScannerComp
+        ? React.createElement(ScannerComp, {
+            branchCode: branchCode ?? "DUM",
+            defaultMemberName: name ?? "",
+            initialEntryOption: initialEntry,
+          })
+        : null}
     </>
   )
 }

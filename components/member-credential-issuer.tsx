@@ -103,7 +103,7 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
           <Input
             value={activeBranch}
             onChange={(event) => setActiveBranch(event.target.value)}
-            placeholder="e.g. DUM"
+            placeholder="e.g. MAIN"
           />
         </div>
       </div>

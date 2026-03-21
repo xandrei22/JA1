@@ -24,7 +24,6 @@ export function BranchRecognitionPanel({
 }) {
   const [activeBranch, setActiveBranch] = useState(branchCode)
   const [branchName, setBranchName] = useState(`JA1 ${branchCode.toUpperCase()}`)
-  const [note, setNote] = useState("")
   const [address, setAddress] = useState<{ address?: string; zip?: string }>({})
   const [message, setMessage] = useState(
     canApproveBranches
@@ -54,11 +53,6 @@ export function BranchRecognitionPanel({
   }, [activeBranch, branchCode])
 
   async function submitRequest() {
-    if (!note.trim()) {
-      setMessage("Recognition note is required.")
-      return
-    }
-
     setIsSubmitting(true)
     setMessage("Submitting request...")
 
@@ -68,7 +62,6 @@ export function BranchRecognitionPanel({
       body: JSON.stringify({
         branchCode: activeBranch.trim() || branchCode,
         branchName: branchName.trim() || `JA1 ${(activeBranch.trim() || branchCode).toUpperCase()}`,
-        note: note.trim(),
         address: address.address?.trim() ?? "",
         zip: address.zip ?? "",
       }),
@@ -90,7 +83,6 @@ export function BranchRecognitionPanel({
       (payload.message ?? "") ||
       "Branch recognition request submitted and waiting for VIP approval."
     setMessage(serverMessage)
-    setNote("")
     await loadRequests()
   }
 
@@ -103,7 +95,7 @@ export function BranchRecognitionPanel({
           : "Supervising pastor submits branch recognition for VIP approval."}
       </p>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div>
           <p className="mb-1 text-sm font-medium">Branch Code</p>
           <Input value={activeBranch} onChange={(event) => setActiveBranch(event.target.value)} />
@@ -116,16 +108,11 @@ export function BranchRecognitionPanel({
             placeholder="e.g. JA1 Downtown"
           />
         </div>
-        <div>
-          <p className="mb-1 text-sm font-medium">Recognition Note</p>
-          <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why this branch is ready for recognition" />
-        </div>
       </div>
-      
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+
+      <div className="mt-4 grid gap-3">
         <div>
           <p className="mb-1 text-sm font-medium">Branch Address</p>
-          {/* dynamically imported phil-address autocomplete */}
           <PhilAddressAutocomplete
             value={address}
             onChange={(v) => setAddress(v)}
@@ -133,9 +120,13 @@ export function BranchRecognitionPanel({
             alwaysShowStructured
           />
         </div>
-        <div>
+        <div className="max-w-sm">
           <p className="mb-1 text-sm font-medium">ZIP / Postal Code</p>
-          <Input value={address.zip ?? ""} onChange={(e) => setAddress((p) => ({ ...p, zip: e.target.value }))} />
+          <Input
+            value={address.zip ?? ""}
+            onChange={(e) => setAddress((p) => ({ ...p, zip: e.target.value }))}
+            placeholder="e.g. 4200"
+          />
         </div>
       </div>
 

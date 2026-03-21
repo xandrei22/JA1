@@ -2,10 +2,12 @@ import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 
+import { findLocalAdminByEmail } from "@/lib/server/local-admin-store"
 import { verifyPassword } from "@/lib/server/password"
-import { resolveRoleByEmail, ROLES, type Role } from "@/lib/server/rbac"
+import { normalizeOperationalRole, resolveRoleByEmail, ROLES, type Role } from "@/lib/server/rbac"
 import { isSupabaseConfigured, selectSupabaseSingle } from "@/lib/server/supabase-admin"
 
+// In-memory storage for admins created when Supabase is unavailable
 type SeedUser = {
   id: string
   email: string
@@ -22,7 +24,7 @@ function isRole(value: string): value is Role {
 
 function resolveSafeRole(inputRole: string | undefined, email: string): Role {
   if (inputRole && isRole(inputRole)) {
-    return inputRole
+    return normalizeOperationalRole(inputRole)
   }
 
   return resolveRoleByEmail(email)
@@ -112,6 +114,7 @@ type CentralUserRow = {
   full_name: string | null
   branch_code: string | null
   age_group: string | null
+  role: string | null
   is_active: boolean
 }
 
@@ -128,20 +131,37 @@ const providers: NextAuthOptions["providers"] = [
       const email = credentials.email.toLowerCase().trim()
 
       if (isSupabaseConfigured()) {
-        const dbUser = await selectSupabaseSingle<CentralUserRow>("central_users", {
-          email,
-          is_active: true,
-        })
+        try {
+          const dbUser = await selectSupabaseSingle<CentralUserRow>("central_users", {
+            email,
+            is_active: true,
+          })
 
-        if (dbUser && verifyPassword(credentials.password, dbUser.password_hash)) {
-          return {
-            id: dbUser.id,
-            email: dbUser.email,
-            name: dbUser.full_name ?? dbUser.email,
-            role: resolveRoleByEmail(dbUser.email),
-            branchCode: dbUser.branch_code,
-            ageGroup: dbUser.age_group,
+          if (dbUser && verifyPassword(credentials.password, dbUser.password_hash)) {
+            return {
+              id: dbUser.id,
+              email: dbUser.email,
+              name: dbUser.full_name ?? dbUser.email,
+              role: resolveSafeRole(dbUser.role ?? undefined, dbUser.email),
+              branchCode: dbUser.branch_code,
+              ageGroup: dbUser.age_group,
+            }
           }
+        } catch {
+          // Fall back to in-memory and seed users if Supabase is unavailable
+        }
+      }
+
+      // Check local fallback admins created while Supabase was down
+      const localAdmin = await findLocalAdminByEmail(email)
+      if (localAdmin && localAdmin.is_active && verifyPassword(credentials.password, localAdmin.password_hash)) {
+        return {
+          id: localAdmin.id,
+          email: localAdmin.email,
+          name: localAdmin.full_name ?? localAdmin.email,
+          role: localAdmin.role as Role,
+          branchCode: localAdmin.branch_code,
+          ageGroup: null,
         }
       }
 

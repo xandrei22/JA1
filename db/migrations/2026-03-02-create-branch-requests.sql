@@ -18,11 +18,14 @@ CREATE TABLE IF NOT EXISTS public.branch_requests (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- Optional: prevent duplicate branch_code for pending/approved entries
-CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_requests_branch_code ON public.branch_requests (branch_code);
+-- Optional: prevent duplicate branch_code only while request is pending/approved
+DROP INDEX IF EXISTS public.idx_branch_requests_branch_code;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_branch_requests_branch_code_active
+  ON public.branch_requests (branch_code)
+  WHERE status IN ('pending', 'approved');
 
 -- Helpful view: pending requests
-CREATE VIEW IF NOT EXISTS public.view_branch_requests_pending AS
+CREATE OR REPLACE VIEW public.view_branch_requests_pending AS
 SELECT id, branch_code, name, address, leader, status, requested_by_user_id, requested_at
 FROM public.branch_requests
 WHERE status = 'pending';

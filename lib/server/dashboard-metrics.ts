@@ -75,8 +75,16 @@ export async function getSuperAdminDashboardMetrics(): Promise<SuperAdminMetrics
       ascending: false,
     })
   } catch (error) {
-    if (!isMissingSupabaseTableError(error, "attendance_logs")) {
-      throw error
+    if (isMissingSupabaseTableError(error, "attendance_logs")) {
+      // Table doesn't exist, continue with empty rows
+    } else {
+      // Network or config error; return defaults instead of throwing
+      return {
+        mainChurchAverageAttendees: 0,
+        allBranchesAverageAttendees: 0,
+        pendingApprovalRequests: 0,
+        note: "Supabase is temporarily unavailable. Metrics cannot be loaded.",
+      }
     }
   }
 
@@ -91,7 +99,8 @@ export async function getSuperAdminDashboardMetrics(): Promise<SuperAdminMetrics
     pendingRequests = rows.length
   } catch (error) {
     if (!isMissingSupabaseTableError(error, "branch_recognition_requests")) {
-      throw error
+      // Network or other error; don't double-fail, just skip pending requests
+      pendingRequests = 0
     }
   }
 
