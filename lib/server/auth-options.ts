@@ -193,6 +193,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 export const authOptions: NextAuthOptions = {
+  // Support both env names so Vercel/Auth.js setups do not fail at runtime.
+  secret: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET,
   providers,
   pages: {
     signIn: "/login",

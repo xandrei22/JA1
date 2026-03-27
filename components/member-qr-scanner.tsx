@@ -83,6 +83,8 @@ export function MemberQrScanner({
   const [sessionActivities, setSessionActivities] = useState<AttendanceSessionPayload[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
   const [pendingScan, setPendingScan] = useState<PendingScan | null>(null)
+  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([])
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("")
   const [isGeneratingSession, setIsGeneratingSession] = useState(false)
   const [isConfirmingName, setIsConfirmingName] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
@@ -718,7 +720,7 @@ export function MemberQrScanner({
     if (typeof window !== "undefined" && !window.isSecureContext) {
       setStatus({
         tone: "error",
-        message: "Camera requires HTTPS on mobile browsers. Open this site using https://",
+        message: "⚠️ Camera requires HTTPS. Please visit this site using https:// (not http://)",
       })
       return
     }
@@ -726,7 +728,7 @@ export function MemberQrScanner({
     if (typeof navigator !== "undefined" && !navigator.mediaDevices?.getUserMedia) {
       setStatus({
         tone: "error",
-        message: "This browser does not support camera access.",
+        message: "❌ This browser does not support camera access.",
       })
       return
     }
@@ -735,6 +737,29 @@ export function MemberQrScanner({
 
     try {
       const { Html5Qrcode } = await import("html5-qrcode")
+      
+      // First, enumerate available cameras if not yet done
+      if (availableCameras.length === 0) {
+        try {
+          const cameras = await Html5Qrcode.getCameras()
+          setAvailableCameras(cameras)
+          if (cameras.length === 0) {
+            setStatus({
+              tone: "error",
+              message: "❌ No cameras detected on this device. Check browser permissions.",
+            })
+            return
+          }
+        } catch (enumError) {
+          const msg = enumError instanceof Error ? enumError.message : String(enumError)
+          setStatus({
+            tone: "error",
+            message: `❌ Could not access camera list: ${msg}. Check permissions and HTTPS.`,
+          })
+          return
+        }
+      }
+
       const scanner = new Html5Qrcode("member-qr-reader")
       const scanConfig = {
         fps: 10,
@@ -762,31 +787,57 @@ export function MemberQrScanner({
       let startupError: unknown = null
       let started = false
 
-      try {
-        await scanner.start(
-          { facingMode: { ideal: "environment" } },
-          scanConfig,
-          onScanSuccess,
-          onScanError
-        )
-        started = true
-      } catch (primaryError) {
-        startupError = primaryError
+      // If user manually selected a camera, try that first
+      if (selectedCameraId) {
+        try {
+          await scanner.start(selectedCameraId, scanConfig, onScanSuccess, onScanError)
+          started = true
+        } catch (manualError) {
+          startupError = manualError
+        }
       }
 
-      // Some mobile browsers ignore/deny facingMode. Fallback to explicit camera ID.
+      // Try auto-detection (facingMode environment preference)
       if (!started) {
         try {
-          const cameras = await Html5Qrcode.getCameras()
+          await scanner.start(
+            { facingMode: { ideal: "environment" } },
+            scanConfig,
+            onScanSuccess,
+            onScanError
+          )
+          started = true
+        } catch (primaryError) {
+          startupError = primaryError
+        }
+      }
+
+      // Try explicit rear/back camera by ID
+      if (!started && availableCameras.length > 0) {
+        try {
           const rearCamera =
-            cameras.find((camera) => /back|rear|environment/i.test(camera.label)) ?? cameras[0]
+            availableCameras.find((c) => /back|rear|environment/i.test(c.label.toLowerCase())) ??
+            availableCameras.find((c) => !/front|user|selfie/i.test(c.label.toLowerCase())) ??
+            availableCameras[0]
 
           if (rearCamera?.id) {
+            setSelectedCameraId(rearCamera.id)
             await scanner.start(rearCamera.id, scanConfig, onScanSuccess, onScanError)
             started = true
           }
         } catch (fallbackError) {
           startupError = fallbackError
+        }
+      }
+
+      // Try first available camera as last resort
+      if (!started && availableCameras[0]?.id) {
+        try {
+          setSelectedCameraId(availableCameras[0].id)
+          await scanner.start(availableCameras[0].id, scanConfig, onScanSuccess, onScanError)
+          started = true
+        } catch (lastError) {
+          startupError = lastError
         }
       }
 
@@ -803,36 +854,45 @@ export function MemberQrScanner({
         if (lower.includes("notallowed") || lower.includes("permission") || lower.includes("denied")) {
           setStatus({
             tone: "error",
-            message: "Camera permission denied. Allow camera access in browser settings and retry.",
+            message:
+              "🔒 Camera permission denied. Go to browser settings, find this app/site, and enable Camera permission; then retry.",
           })
           return
         }
 
         if (lower.includes("notfound") || lower.includes("device not found") || lower.includes("overconstrained")) {
-          setStatus({
-            tone: "error",
-            message: "No usable camera found on this device.",
-          })
+          if (availableCameras.length > 1) {
+            setStatus({
+              tone: "error",
+              message: `⚠️ Default camera unavailable. ${availableCameras.length} cameras found. Try using the camera selector dropdown above.`,
+            })
+          } else {
+            setStatus({
+              tone: "error",
+              message: "❌ No usable camera found on this device.",
+            })
+          }
           return
         }
 
         setStatus({
           tone: "error",
-          message: "Unable to start camera. Ensure HTTPS is used and permission is allowed.",
+          message: `❌ Failed to start camera: ${details}. Ensure HTTPS and permissions are enabled.`,
         })
         return
       }
 
       scannerRef.current = scanner
       setIsScanning(true)
-      setStatus({ tone: "idle", message: "Scanner is active. Point camera at member QR." })
-    } catch {
+      setStatus({ tone: "idle", message: "✅ Scanner is active. Point camera at QR code." })
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
       setStatus({
         tone: "error",
-        message: "Unable to access camera. Allow camera permission and try again.",
+        message: `❌ Unexpected error: ${msg}`,
       })
     }
-  }, [handleDecodedScan, isScanning])
+  }, [handleDecodedScan, isScanning, selectedCameraId, availableCameras])
 
   useEffect(() => {
     return () => {
@@ -1117,6 +1177,29 @@ export function MemberQrScanner({
             <div className="mt-4">
               <p className="text-xs text-muted-foreground">{sessionPayload ? `Active event: ${eventCode}` : `No active event loaded`}</p>
               <div id="member-qr-reader" className="min-h-[280px] overflow-hidden rounded-lg border bg-background mt-2" />
+              
+              {/* Manual Camera Selector (for phones where auto-detection fails) */}
+              {availableCameras.length > 1 && !isScanning ? (
+                <div className="mt-3 mb-3">
+                  <label className="text-sm font-medium">Select Camera</label>
+                  <select
+                    value={selectedCameraId}
+                    onChange={(e) => setSelectedCameraId(e.target.value)}
+                    className="w-full mt-1 rounded-md border px-3 py-2 text-sm bg-background"
+                  >
+                    <option value="">Auto-detect (first available)</option>
+                    {availableCameras.map((cam) => (
+                      <option key={cam.id} value={cam.id}>
+                        {cam.label || `Camera ${cam.id.slice(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {availableCameras.length} camera(s) detected. Look for "Back" or "Rear" camera for QR scanning.
+                  </p>
+                </div>
+              ) : null}
+              
               <div className="mt-3 flex gap-3">
                 <Button type="button" variant={isScanning ? "outline" : "default"} onClick={() => void (isScanning ? stopScanner() : startScanner())}>
                   {isScanning ? "Stop Scanner" : "Start Camera"}

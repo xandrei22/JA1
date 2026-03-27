@@ -1,6 +1,11 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import Image from "next/image"
 import Link from "next/link"
+import { Menu } from "lucide-react"
+import { useState } from "react"
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -11,9 +16,11 @@ const navItems = [
 ]
 
 export function SiteHeader() {
+  const [open, setOpen] = useState(false)
+
   return (
     <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex min-h-14 w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <Image
             src="/JA1mlogo.svg"
@@ -30,7 +37,8 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="flex flex-wrap items-center gap-1 text-sm">
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex flex-wrap items-center gap-1 text-sm">
           {navItems.map((item) => (
             <Button key={item.href} variant="ghost" size="sm" asChild>
               <Link href={item.href}>{item.label}</Link>
@@ -38,7 +46,8 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        {/* Desktop Auth Buttons */}
+        <div className="hidden sm:flex items-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href="/login">Sign In</Link>
           </Button>
@@ -46,6 +55,38 @@ export function SiteHeader() {
             <Link href="/signup">Sign Up</Link>
           </Button>
         </div>
+
+        {/* Mobile Hamburger Menu */}
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Toggle menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[250px]">
+            <nav className="flex flex-col gap-2 mt-8">
+              {navItems.map((item) => (
+                <Button
+                  key={item.href}
+                  variant="ghost"
+                  className="justify-start"
+                  asChild
+                  onClick={() => setOpen(false)}
+                >
+                  <Link href={item.href}>{item.label}</Link>
+                </Button>
+              ))}
+              <hr className="my-2" />
+              <Button variant="outline" asChild onClick={() => setOpen(false)}>
+                <Link href="/login">Sign In</Link>
+              </Button>
+              <Button asChild onClick={() => setOpen(false)}>
+                <Link href="/signup">Sign Up</Link>
+              </Button>
+            </nav>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   )
