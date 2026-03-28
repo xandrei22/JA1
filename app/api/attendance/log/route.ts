@@ -115,12 +115,12 @@ export async function GET(request: Request) {
 
     // Draw header
     doc.setFontSize(10)
-    doc.setFont(undefined, "bold")
+    doc.setFont("Helvetica", "bold")
     doc.text(headers.join(" | "), 10, yPosition)
     yPosition += lineHeight
 
     // Draw rows
-    doc.setFont(undefined, "normal")
+    doc.setFont("Helvetica", "normal")
     for (const row of data) {
       if (yPosition > pageHeight - 10) {
         doc.addPage()
