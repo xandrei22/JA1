@@ -12,5 +12,19 @@
     "generatedAt": "2026-03-21T15:31:27.789Z",
     "persisted": false,
     "note": "Event persistence failed. Session code was still generated."
+  },
+  {
+    "branchCode": "DMNTY",
+    "eventCode": "SUNDAY-SERVICE-20260329-5A7B",
+    "eventName": "SUNDAY SERVICE",
+    "eventPlace": "DUMANTAY, BATANGAS CITY",
+    "eventDate": "2026-03-29",
+    "eventStartTime": "08:00",
+    "eventEndTime": "10:00",
+    "backupCode": "JA1-DMNTY-2026-27C1",
+    "qrPayload": "{\"type\":\"attendance_session\",\"branchCode\":\"DMNTY\",\"eventCode\":\"SUNDAY-SERVICE-20260329-5A7B\",\"eventName\":\"SUNDAY SERVICE\",\"eventPlace\":\"DUMANTAY, BATANGAS CITY\",\"eventDate\":\"2026-03-29\",\"eventStartTime\":\"08:00\",\"eventEndTime\":\"10:00\",\"eventTime\":\"08:00\",\"equivalentCode\":\"JA1-DMNTY-2026-27C1\",\"issuedAt\":\"2026-03-28T00:35:53.446Z\"}",
+    "generatedAt": "2026-03-28T00:35:53.442Z",
+    "persisted": false,
+    "note": "Event persistence failed. Session code was still generated."
   }
 ]

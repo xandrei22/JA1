@@ -3,6 +3,13 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useCallback, useEffect, useState } from "react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ChevronDown } from "lucide-react"
 
 type AttendanceRecord = {
   memberId: string
@@ -64,39 +71,50 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
     loadRecords()
   }, [branchCode])
 
-  const downloadCsv = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const params = new URLSearchParams({ branchCode, limit: "10000", export: "csv" })
-      if (eventFilter.trim()) params.set("event", eventFilter.trim())
-      if (startDate) params.set("start", startDate)
-      if (endDate) params.set("end", endDate)
-      if (startTime) params.set("startTime", startTime)
-      if (endTime) params.set("endTime", endTime)
+  const downloadReport = useCallback(
+    async (format: "csv" | "excel" | "pdf") => {
+      setIsLoading(true)
+      try {
+        const params = new URLSearchParams({ branchCode, limit: "10000", export: format })
+        if (eventFilter.trim()) params.set("event", eventFilter.trim())
+        if (startDate) params.set("start", startDate)
+        if (endDate) params.set("end", endDate)
+        if (startTime) params.set("startTime", startTime)
+        if (endTime) params.set("endTime", endTime)
 
-      const res = await fetch(`/api/attendance/log?${params.toString()}`)
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "Failed to download")
-        setMessage(txt)
-        return
+        const res = await fetch(`/api/attendance/log?${params.toString()}`)
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "Failed to download")
+          setMessage(txt)
+          return
+        }
+
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+
+        // Set appropriate filename and content type based on format
+        const fileExtensions: Record<string, string> = {
+          csv: "csv",
+          excel: "xlsx",
+          pdf: "pdf",
+        }
+        a.download = `attendance-${branchCode}.${fileExtensions[format]}`
+
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+        setMessage(`${format.toUpperCase()} download started.`)
+      } catch (err: any) {
+        setMessage(err?.message ?? `Failed to download ${format.toUpperCase()}`)
+      } finally {
+        setIsLoading(false)
       }
-
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `attendance-${branchCode}.csv`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      setMessage("CSV download started.")
-    } catch (err: any) {
-      setMessage(err?.message ?? "Failed to download CSV")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [branchCode, eventFilter, startDate, endDate, startTime, endTime])
+    },
+    [branchCode, eventFilter, startDate, endDate, startTime, endTime]
+  )
 
   const filtered = records.filter((record) =>
     eventFilter.trim()
@@ -156,9 +174,24 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
           <Button type="button" variant="outline" onClick={loadRecords} disabled={isLoading}>
             {isLoading ? "Loading..." : "Refresh Logs"}
           </Button>
-          <Button type="button" onClick={downloadCsv} disabled={isLoading}>
-            Download CSV
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" disabled={isLoading}>
+                Download <ChevronDown className="ml-2 size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => downloadReport("csv")}>
+                CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadReport("excel")}>
+                Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadReport("pdf")}>
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="ml-auto">
           <Input placeholder="Search events..." value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} />

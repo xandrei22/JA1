@@ -85,7 +85,7 @@ export default function Home() {
         <section id="gallery-section" className="w-full py-0">
             <div className="w-full">
               <Carousel className="h-full w-full">
-                <CarouselContent className="h-screen !-ml-0">
+                <CarouselContent className="h-48 sm:h-72 md:h-screen !-ml-0">
                   {gallerySlides.map((slide) => (
                     <CarouselItem key={slide.alt} className="h-full !pl-0">
                       <div className="relative h-full w-full overflow-hidden">
@@ -106,28 +106,28 @@ export default function Home() {
             </div>
         </section>
 
-        <section id="founder-section" className="w-full bg-white py-14">
-          <div className="mx-auto grid min-h-[50vh] w-full max-w-6xl gap-6 px-4 md:grid-cols-2 md:items-stretch sm:px-6 lg:px-8">
-            <div className="flex flex-col justify-center">
-              <h2 className="text-3xl font-bold tracking-tight">Who Is the Founder</h2>
-              <p className="mt-3 text-lg text-muted-foreground">
+        <section id="founder-section" className="w-full bg-white py-8 sm:py-12 md:py-14">
+          <div className="mx-auto flex flex-col w-full max-w-6xl gap-6 px-4 sm:px-6 lg:px-8 md:grid md:grid-cols-2 md:items-center">
+            <div className="flex flex-col justify-center order-2 md:order-1 md:w-full">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Who Is the Founder</h2>
+              <p className="mt-3 text-base sm:text-lg text-muted-foreground">
                 Learn about the founder&apos;s story, vision, and mission for the congregation, all in this homepage section.
               </p>
             </div>
 
-            <div className="h-full">
+            <div className="order-1 md:order-2 w-full h-48 sm:h-64 md:h-96">
               <Carousel className="h-full w-full">
-                <CarouselContent className="h-[50vh]">
+                <CarouselContent className="h-full">
                   {founderSlides.map((slide) => (
                     <CarouselItem key={slide.alt} className="h-full">
                       <div className="bg-muted relative h-full w-full overflow-hidden rounded-xl border">
-                        <Image src={slide.src} alt={slide.alt} fill className="object-cover" />
+                        <Image src={slide.src} alt={slide.alt} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px" className="object-cover object-center" />
                       </div>
                     </CarouselItem>
                   ))}
                 </CarouselContent>
-                <CarouselPrevious className="left-2 size-7" />
-                <CarouselNext className="right-2 size-7" />
+                <CarouselPrevious className="left-1 sm:left-2 size-6 sm:size-7" />
+                <CarouselNext className="right-1 sm:right-2 size-6 sm:size-7" />
               </Carousel>
             </div>
           </div>
@@ -160,9 +160,9 @@ export default function Home() {
 
         <section id="find-section" className="w-full bg-white py-14">
           <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-            <div className="grid gap-6 md:grid-cols-2 md:items-stretch">
-              <div className="h-full rounded-xl border border-primary/40 bg-background p-6 text-center shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl">
-                <div className="flex h-full flex-col items-center gap-8">
+            <div className="flex justify-center">
+              <div className="w-full max-w-md rounded-xl border border-primary/40 bg-background p-6 text-center shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl">
+                <div className="flex flex-col items-center gap-8">
                   <div>
                     <div className="mb-3 flex justify-center">
                       <div className="inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">

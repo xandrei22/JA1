@@ -1,5 +1,7 @@
 import { getServerSession } from "next-auth"
 import { NextResponse } from "next/server"
+import * as XLSX from "xlsx"
+import jsPDF from "jspdf"
 
 import { authOptions } from "@/lib/server/auth-options"
 import {
@@ -65,6 +67,76 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "text/csv",
         "Content-Disposition": `attachment; filename="attendance-${branchCode}.csv"`,
+      },
+    })
+  }
+
+  if (exportFormat === "excel") {
+    // build Excel workbook
+    const rows = result.records ?? []
+    const data = [
+      ["Member ID", "Event Code", "Branch Code", "Method", "Logged At"],
+      ...rows.map((r) => [r.memberId, r.eventCode, r.branchCode, r.method, r.loggedAt]),
+    ]
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance")
+
+    // Generate Excel file as buffer
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" })
+
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="attendance-${branchCode}.xlsx"`,
+      },
+    })
+  }
+
+  if (exportFormat === "pdf") {
+    // build PDF document
+    const rows = result.records ?? []
+    const doc = new jsPDF()
+
+    // Add title
+    doc.setFontSize(14)
+    doc.text(`Attendance Report - ${branchCode}`, 10, 10)
+
+    // Add table
+    const headers = ["Member ID", "Event Code", "Branch Code", "Method", "Logged At"]
+    const data = rows.map((r) => [r.memberId, r.eventCode, r.branchCode, r.method, r.loggedAt])
+
+    let yPosition = 20
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const lineHeight = 7
+
+    // Draw header
+    doc.setFontSize(10)
+    doc.setFont(undefined, "bold")
+    doc.text(headers.join(" | "), 10, yPosition)
+    yPosition += lineHeight
+
+    // Draw rows
+    doc.setFont(undefined, "normal")
+    for (const row of data) {
+      if (yPosition > pageHeight - 10) {
+        doc.addPage()
+        yPosition = 10
+      }
+      doc.text(row.join(" | "), 10, yPosition)
+      yPosition += lineHeight
+    }
+
+    const pdfBuffer = Buffer.from(doc.output("arraybuffer"))
+
+    return new NextResponse(pdfBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="attendance-${branchCode}.pdf"`,
       },
     })
   }

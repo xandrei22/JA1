@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { signOut } from "next-auth/react"
 import { Bell, ChevronsUpDown, LogOut, Settings2 } from "lucide-react"
 import Link from "next/link"
@@ -9,6 +10,15 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,8 +45,10 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false)
 
-  async function handleLogout() {
+  async function handleConfirmLogout() {
+    setLogoutDialogOpen(false)
     await signOut({ callbackUrl: "/" })
   }
 
@@ -92,10 +104,26 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleLogout}>
-              <LogOut />
-              Log out
-            </DropdownMenuItem>
+            <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <LogOut />
+                  Log out
+                </DropdownMenuItem>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogTitle>Log out?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to log out? You'll need to sign in again to access your account.
+                </AlertDialogDescription>
+                <div className="flex justify-end gap-2">
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleConfirmLogout}>
+                    Log out
+                  </AlertDialogAction>
+                </div>
+              </AlertDialogContent>
+            </AlertDialog>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
