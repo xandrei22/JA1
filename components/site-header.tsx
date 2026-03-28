@@ -64,27 +64,51 @@ export function SiteHeader() {
               <span className="sr-only">Toggle menu</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-[250px]">
-            <nav className="flex flex-col gap-2 mt-8">
+          <SheetContent side="right" className="w-[280px] flex flex-col p-0">
+            <div className="flex items-center gap-2 px-4 py-3 border-b">
+              <Image
+                src="/JA1mlogo.svg"
+                alt="JA1 logo"
+                width={28}
+                height={28}
+                className="rounded-full"
+              />
+              <span className="text-sm font-semibold text-primary">JA1</span>
+            </div>
+            
+            <nav className="flex flex-col gap-0 flex-1 overflow-y-auto">
               {navItems.map((item) => (
                 <Button
                   key={item.href}
                   variant="ghost"
-                  className="justify-start"
+                  className="justify-start h-9 text-sm font-medium hover:bg-primary/10 hover:text-primary rounded-none border-b"
                   asChild
                   onClick={() => setOpen(false)}
                 >
                   <Link href={item.href}>{item.label}</Link>
                 </Button>
               ))}
-              <hr className="my-2" />
-              <Button variant="outline" asChild onClick={() => setOpen(false)}>
+            </nav>
+
+            <div className="border-t p-3 flex flex-col gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="w-full font-medium h-9"
+                asChild 
+                onClick={() => setOpen(false)}
+              >
                 <Link href="/login">Sign In</Link>
               </Button>
-              <Button asChild onClick={() => setOpen(false)}>
+              <Button 
+                size="sm"
+                className="w-full font-medium h-9"
+                asChild 
+                onClick={() => setOpen(false)}
+              >
                 <Link href="/signup">Sign Up</Link>
               </Button>
-            </nav>
+            </div>
           </SheetContent>
         </Sheet>
       </div>
