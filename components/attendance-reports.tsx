@@ -28,6 +28,7 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
   const [startTime, setStartTime] = useState<string | null>(null)
   const [endTime, setEndTime] = useState<string | null>(null)
   const [message, setMessage] = useState("Loading attendance logs...")
+  const [isPersisted, setIsPersisted] = useState(false)
 
   const loadRecords = useCallback(async () => {
     setIsLoading(true)
@@ -51,19 +52,29 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
       error?: string
       records?: AttendanceRecord[]
       note?: string
+      persisted?: boolean
     }
 
     setIsLoading(false)
 
     if (!response.ok) {
       setMessage(payload.error ?? "Failed to load attendance logs.")
+      setIsPersisted(false)
       return
     }
 
+    const recordCount = (payload.records ?? []).length
     setRecords(payload.records ?? [])
-    setMessage(
-      payload.note ?? `Loaded ${(payload.records ?? []).length} attendance logs.`
-    )
+    setIsPersisted(payload.persisted ?? false)
+
+    if (recordCount === 0) {
+      setMessage("✓ No attendance records found for the selected period.")
+    } else {
+      const sourceNote = payload.persisted ? "(synced from Supabase)" : "(cached from local storage)"
+      setMessage(
+        `✓ ${recordCount} attendance record${recordCount === 1 ? "" : "s"} loaded ${sourceNote}.`
+      )
+    }
   }, [branchCode, eventFilter, startDate, endDate, startTime, endTime])
 
   // Load initial data on mount

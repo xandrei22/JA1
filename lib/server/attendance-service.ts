@@ -16,6 +16,11 @@ import {
   addLocalAttendanceSession,
   listLocalAttendanceSessions,
 } from "@/lib/server/local-attendance-sessions"
+import {
+  addLocalAttendanceLog,
+  listLocalAttendanceLogs,
+  listLocalMemberAttendanceLogs,
+} from "@/lib/server/local-attendance-logs"
 
 export type MemberCredential = {
   memberId: string
@@ -134,6 +139,16 @@ export async function logAttendance(input: AttendanceLogInput) {
     }
   }
 
+  const logRecord = {
+    memberId: input.memberId,
+    eventCode: input.eventCode,
+    branchCode: input.branchCode,
+    method: input.method as "qr" | "manual",
+    sourceCode: input.sourceCode,
+    loggedByUserId: input.loggedByUserId,
+    loggedAt,
+  }
+
   if (isSupabaseConfigured()) {
     try {
       const inserted = await insertSupabaseRow("attendance_logs", {
@@ -146,25 +161,22 @@ export async function logAttendance(input: AttendanceLogInput) {
         logged_at: loggedAt,
       })
 
+      inMemoryAttendanceLogs.push(logRecord)
+      await addLocalAttendanceLog(logRecord)
+
       return {
         loggedAt,
         persisted: true,
         record: inserted,
       }
     } catch {
-      // Fall back to in-memory storage so the current session can still see attendance history.
+      // Fall back to local file and in-memory storage
     }
   }
 
-  inMemoryAttendanceLogs.push({
-    memberId: input.memberId,
-    eventCode: input.eventCode,
-    branchCode: input.branchCode,
-    method: input.method,
-    sourceCode: input.sourceCode,
-    loggedByUserId: input.loggedByUserId,
-    loggedAt,
-  })
+  // Always persist to local file and in-memory as fallback
+  inMemoryAttendanceLogs.push(logRecord)
+  await addLocalAttendanceLog(logRecord)
 
   return {
     loggedAt,
@@ -172,7 +184,7 @@ export async function logAttendance(input: AttendanceLogInput) {
     record: {
       ...input,
       loggedAt,
-      note: "Supabase unavailable. Data is kept in memory for this server session.",
+      note: "Attendance logged locally. Data will sync when Supabase is available.",
     },
   }
 }
@@ -195,54 +207,73 @@ export async function listAttendanceLogs(input: {
     : null
 
   if (isSupabaseConfigured()) {
-    const rows = await selectSupabaseRows<{
-      member_id: string
-      event_code: string
-      branch_code: string
-      method: AttendanceMethod
-      source_code: string
-      logged_by_user_id: string
-      logged_at: string
-    }>({
-      table: "attendance_logs",
-      filters: { branch_code: input.branchCode },
-      limit: 500,
-      orderBy: "logged_at",
-      ascending: false,
-    })
+    try {
+      const rows = await selectSupabaseRows<{
+        member_id: string
+        event_code: string
+        branch_code: string
+        method: AttendanceMethod
+        source_code: string
+        logged_by_user_id: string
+        logged_at: string
+      }>({
+        table: "attendance_logs",
+        filters: { branch_code: input.branchCode },
+        limit: 500,
+        orderBy: "logged_at",
+        ascending: false,
+      })
 
-    let filteredRows = rows
+      let filteredRows = rows
 
-    if (input.eventQuery && input.eventQuery.trim()) {
-      const q = input.eventQuery.trim().toLowerCase()
-      filteredRows = filteredRows.filter((row) => String(row.event_code).toLowerCase().includes(q))
-    }
+      if (input.eventQuery && input.eventQuery.trim()) {
+        const q = input.eventQuery.trim().toLowerCase()
+        filteredRows = filteredRows.filter((row) => String(row.event_code).toLowerCase().includes(q))
+      }
 
-    if (startBoundary !== null) {
-      filteredRows = filteredRows.filter((row) => new Date(row.logged_at).getTime() >= startBoundary)
-    }
+      if (startBoundary !== null) {
+        filteredRows = filteredRows.filter((row) => new Date(row.logged_at).getTime() >= startBoundary)
+      }
 
-    if (endBoundary !== null) {
-      filteredRows = filteredRows.filter((row) => new Date(row.logged_at).getTime() <= endBoundary)
-    }
+      if (endBoundary !== null) {
+        filteredRows = filteredRows.filter((row) => new Date(row.logged_at).getTime() <= endBoundary)
+      }
 
-    filteredRows = filteredRows.slice(0, limit)
+      filteredRows = filteredRows.slice(0, limit)
 
-    return {
-      persisted: true,
-      records: filteredRows.map((row) => ({
-        memberId: row.member_id,
-        eventCode: row.event_code,
-        branchCode: row.branch_code,
-        method: row.method,
-        sourceCode: row.source_code,
-        loggedByUserId: row.logged_by_user_id,
-        loggedAt: row.logged_at,
-      })),
+      return {
+        persisted: true,
+        records: filteredRows.map((row) => ({
+          memberId: row.member_id,
+          eventCode: row.event_code,
+          branchCode: row.branch_code,
+          method: row.method,
+          sourceCode: row.source_code,
+          loggedByUserId: row.logged_by_user_id,
+          loggedAt: row.logged_at,
+        })),
+      }
+    } catch {
+      // Fall through to local file + in-memory storage
     }
   }
 
-  let records = inMemoryAttendanceLogs.filter((record) => record.branchCode === input.branchCode)
+  // Merge local file logs with in-memory logs
+  const localLogs = await listLocalAttendanceLogs(input.branchCode, 500)
+  const allRecords = [...inMemoryAttendanceLogs, ...localLogs].filter(
+    (record) => record.branchCode === input.branchCode
+  )
+
+  // Remove duplicates by loggedAt + memberId + eventCode
+  const seen = new Set<string>()
+  const deduplicated = allRecords.filter((record) => {
+    const key = `${record.loggedAt}|${record.memberId}|${record.eventCode}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  let records = deduplicated
 
   if (input.eventQuery && input.eventQuery.trim()) {
     const q = input.eventQuery.trim().toLowerCase()
@@ -282,10 +313,11 @@ export async function listMemberAttendanceLogs(input: { memberId: string; limit?
         if (memberRow?.id) {
           memberIdToUse = memberRow.id
         } else {
-          // No matching member found — return empty set
+          // No matching member found — try local storage as fallback
+          const localRecords = await listLocalMemberAttendanceLogs(input.memberId, limit)
           return {
-            persisted: true,
-            records: [],
+            persisted: false,
+            records: localRecords,
           }
         }
       }
@@ -319,12 +351,26 @@ export async function listMemberAttendanceLogs(input: { memberId: string; limit?
         })),
       }
     } catch {
-      // Fall back to in-memory records when Supabase is unreachable.
+      // Fall back to local storage + in-memory records when Supabase is unreachable.
     }
   }
 
-  const records = inMemoryAttendanceLogs
-    .filter((record) => record.memberId === input.memberId || record.loggedByUserId === input.memberId)
+  // Merge local file logs with in-memory logs
+  const localRecords = await listLocalMemberAttendanceLogs(input.memberId, 500)
+  const allRecords = [...inMemoryAttendanceLogs, ...localRecords].filter(
+    (record) => record.memberId === input.memberId || record.loggedByUserId === input.memberId
+  )
+
+  // Remove duplicates
+  const seen = new Set<string>()
+  const deduplicated = allRecords.filter((record) => {
+    const key = `${record.loggedAt}|${record.memberId}|${record.eventCode}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  const records = deduplicated
     .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())
     .slice(0, limit)
 

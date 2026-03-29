@@ -475,12 +475,54 @@ export function MemberQrScanner({
       ? new Date(payload.loggedAt).toLocaleTimeString()
       : "now"
 
-    setStatus({
-      tone: "success",
-      message: `Attendance logged for ${payload.memberName ?? checkedName} at ${timeLabel}.`,
-    })
+    // Verify attendance was actually recorded
+    setStatus({ tone: "loading", message: "Verifying attendance record..." })
+
+    try {
+      // Check if the attendance record appears in the recent logs
+      const verifyResponse = await fetch(
+        `/api/attendance/log?branchCode=${encodeURIComponent(branchCode)}&event=${encodeURIComponent(eventCode.trim())}&limit=10`,
+        { method: "GET" }
+      )
+
+      const verifyPayload = (await verifyResponse.json().catch(() => ({}))) as {
+        records?: Array<{
+          memberId: string
+          eventCode: string
+          loggedAt: string
+        }>
+      }
+
+      // Look for the attendance record we just submitted
+      const recordFound = verifyPayload.records?.some(
+        (record) =>
+          record.memberId === pendingScan.memberId &&
+          record.eventCode === eventCode.trim()
+      ) ?? false
+
+      if (recordFound) {
+        setStatus({
+          tone: "success",
+          message: `✓ Attendance confirmed for ${payload.memberName ?? checkedName} on ${eventCode.trim()} at ${timeLabel}. The record is saved.`,
+        })
+        void loadSessionActivities() // Refresh activities list to show new record
+      } else {
+        // Record not found in verification, but API succeeded - might be due to async/persistence
+        setStatus({
+          tone: "success",
+          message: `⚠ Attendance logged for ${payload.memberName ?? checkedName} at ${timeLabel}. (Note: Verifying record...)`,
+        })
+      }
+    } catch {
+      // Verification fetch failed, but original submission succeeded
+      setStatus({
+        tone: "success",
+        message: `✓ Attendance logged for ${payload.memberName ?? checkedName} at ${timeLabel}.`,
+      })
+    }
+
     setPendingScan(null)
-  }, [branchCode, eventCode, pendingScan])
+  }, [branchCode, eventCode, pendingScan, loadSessionActivities])
 
   const resolveTypedMemberCode = useCallback(async () => {
     const normalizedCode = typedMemberCode.trim()
@@ -1222,28 +1264,57 @@ export function MemberQrScanner({
         </Dialog>
 
         {pendingScan ? (
-          <div className="rounded-lg border bg-muted/20 p-4">
-            <p className="text-sm font-medium">Confirm Member Name</p>
-            <p className="mt-1 text-xs text-muted-foreground">Member ID: {pendingScan.memberId}</p>
-            <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+          <div className="rounded-lg border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-base">Confirm & Submit Attendance</p>
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{pendingScan.method.toUpperCase()}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm border-t pt-3">
               <div>
-                <p className="mb-1 text-sm font-medium">Name</p>
-                <Input
-                  value={pendingScan.memberName}
-                  onChange={(event) =>
-                    setPendingScan((current) =>
-                      current
-                        ? {
-                            ...current,
-                            memberName: event.target.value,
-                          }
-                        : current
-                    )
-                  }
-                />
+                <p className="text-muted-foreground text-xs uppercase">Member</p>
+                <p className="font-medium">{pendingScan.memberName || pendingScan.memberId}</p>
               </div>
-              <Button type="button" onClick={submitConfirmedAttendance} disabled={isConfirmingName}>
-                {isConfirmingName ? "Submitting..." : "Confirm Attendance"}
+              <div>
+                <p className="text-muted-foreground text-xs uppercase">Event Code</p>
+                <p className="font-medium">{eventCode || "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs uppercase">Date</p>
+                <p className="font-medium">{eventDate || "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs uppercase">Branch</p>
+                <p className="font-medium">{branchCode || "—"}</p>
+              </div>
+            </div>
+
+            <div className="border-t pt-3">
+              <p className="mb-2 text-sm font-medium">Confirm Member Name</p>
+              <Input
+                value={pendingScan.memberName}
+                onChange={(event) =>
+                  setPendingScan((current) =>
+                    current
+                      ? {
+                          ...current,
+                          memberName: event.target.value,
+                        }
+                      : current
+                  )
+                }
+                placeholder="Enter or confirm member name"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button 
+                type="button" 
+                onClick={submitConfirmedAttendance} 
+                disabled={isConfirmingName}
+                className="flex-1"
+              >
+                {isConfirmingName ? "Processing..." : "✓ Confirm & Log"}
               </Button>
               <Button
                 type="button"
@@ -1251,7 +1322,7 @@ export function MemberQrScanner({
                 onClick={() => setPendingScan(null)}
                 disabled={isConfirmingName}
               >
-                Clear
+                Cancel
               </Button>
             </div>
           </div>

@@ -47,7 +47,13 @@ export function MemberAttendanceHistory() {
 
       const recs = (payload.records ?? []).map(mapSupabaseRowToRecord)
       setRecords(recs)
-      setMessage(recs.length ? "" : "No attendance records yet.")
+      
+      if (recs.length === 0) {
+        setMessage("✓ No attendance records yet. Your attendance will appear here after logging.")
+      } else {
+        setMessage(`✓ You have ${recs.length} attendance record${recs.length === 1 ? "" : "s"}.`)
+      }
+      
       if (recs.length && !myMemberIdRef.current) {
         myMemberIdRef.current = recs[0].memberId
       }
