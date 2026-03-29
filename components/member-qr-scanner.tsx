@@ -1167,7 +1167,7 @@ export function MemberQrScanner({
                 />
               </div>
               <div className="flex gap-2">
-                <Button type="button" onClick={() => { void resolveTypedMemberCode(); setManualOpen(false) }}>
+                <Button type="button" onClick={async () => { await resolveTypedMemberCode(); setManualOpen(false) }}>
                   Use Typed Code
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setManualOpen(false)}>
