@@ -26,5 +26,19 @@
     "generatedAt": "2026-03-28T00:35:53.442Z",
     "persisted": false,
     "note": "Event persistence failed. Session code was still generated."
+  },
+  {
+    "branchCode": "DMNTY",
+    "eventCode": "SUNDAY-WORSHIP-S-20260329-909F",
+    "eventName": "Sunday Worship Service",
+    "eventPlace": "Dumantay",
+    "eventDate": "2026-03-29",
+    "eventStartTime": "16:00",
+    "eventEndTime": "19:00",
+    "backupCode": "JA1-DMNTY-2026-AAC5",
+    "qrPayload": "{\"type\":\"attendance_session\",\"branchCode\":\"DMNTY\",\"eventCode\":\"SUNDAY-WORSHIP-S-20260329-909F\",\"eventName\":\"Sunday Worship Service\",\"eventPlace\":\"Dumantay\",\"eventDate\":\"2026-03-29\",\"eventStartTime\":\"16:00\",\"eventEndTime\":\"19:00\",\"eventTime\":\"16:00\",\"equivalentCode\":\"JA1-DMNTY-2026-AAC5\",\"issuedAt\":\"2026-03-29T08:24:59.261Z\"}",
+    "generatedAt": "2026-03-29T08:24:59.260Z",
+    "persisted": false,
+    "note": "Event persistence failed. Session code was still generated."
   }
 ]

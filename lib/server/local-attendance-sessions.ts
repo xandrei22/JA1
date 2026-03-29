@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "fs/promises"
 import path from "path"
+import { tmpdir } from "os"
 
 export type LocalAttendanceSession = {
   branchCode: string
@@ -16,7 +17,9 @@ export type LocalAttendanceSession = {
   note?: string
 }
 
-const STORE_DIR = path.join(process.cwd(), ".runtime")
+const STORE_DIR = process.env.NODE_ENV === "production" 
+  ? path.join(tmpdir(), "ja1-attendance")
+  : path.join(process.cwd(), ".runtime")
 const STORE_FILE = path.join(STORE_DIR, "attendance-sessions.json")
 
 async function readSessions(): Promise<LocalAttendanceSession[]> {

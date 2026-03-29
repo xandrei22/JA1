@@ -1079,39 +1079,45 @@ export function MemberQrScanner({
                               </span>
                             </td>
                             <td className="px-2 py-2">
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-col gap-2 w-32">
+                                <div className="flex gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 text-xs"
+                                    onClick={() => {
+                                      setSessionPayload(activity)
+                                      setEventCode(activity.eventCode)
+                                      setStatus({ tone: "success", message: `Loaded QR for ${activity.eventCode}.` })
+                                    }}
+                                  >
+                                    View QR
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 text-xs"
+                                    onClick={() => void downloadSessionQrAsImage(activity)}
+                                  >
+                                    Image
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 text-xs"
+                                    onClick={() => void downloadSessionQrAsPdf(activity)}
+                                  >
+                                    PDF
+                                  </Button>
+                                </div>
                                 <Button
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    setSessionPayload(activity)
-                                    setEventCode(activity.eventCode)
-                                    setStatus({ tone: "success", message: `Loaded QR for ${activity.eventCode}.` })
-                                  }}
-                                >
-                                  View QR
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => void downloadSessionQrAsImage(activity)}
-                                >
-                                  Image
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => void downloadSessionQrAsPdf(activity)}
-                                >
-                                  PDF
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
+                                  className="w-full text-xs"
                                   onClick={() => void downloadSessionAttendeesCsv(activity)}
                                 >
                                   Attendees

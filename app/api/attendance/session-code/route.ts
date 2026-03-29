@@ -94,15 +94,23 @@ export async function POST(request: Request) {
     }
   }
 
-  const result = await createAttendanceSession({
-    branchCode,
-    eventName,
-    eventPlace,
-    eventDate,
-    eventStartTime,
-    eventEndTime,
-    createdByUserId: session.user.id,
-  })
+  try {
+    const result = await createAttendanceSession({
+      branchCode,
+      eventName,
+      eventPlace,
+      eventDate,
+      eventStartTime,
+      eventEndTime,
+      createdByUserId: session.user.id,
+    })
 
-  return NextResponse.json(result)
+    return NextResponse.json(result)
+  } catch (error) {
+    console.error("Failed to create attendance session:", error)
+    return NextResponse.json(
+      { error: `Failed to create attendance session: ${error instanceof Error ? error.message : String(error)}` },
+      { status: 500 }
+    )
+  }
 }
