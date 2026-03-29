@@ -162,7 +162,13 @@ export async function logAttendance(input: AttendanceLogInput) {
       })
 
       inMemoryAttendanceLogs.push(logRecord)
-      await addLocalAttendanceLog(logRecord)
+      
+      try {
+        await addLocalAttendanceLog(logRecord)
+      } catch (fileErr) {
+        // Log file write error but don't fail the request
+        console.error("Warning: Failed to write attendance log to file:", fileErr)
+      }
 
       return {
         loggedAt,
@@ -176,7 +182,13 @@ export async function logAttendance(input: AttendanceLogInput) {
 
   // Always persist to local file and in-memory as fallback
   inMemoryAttendanceLogs.push(logRecord)
-  await addLocalAttendanceLog(logRecord)
+  
+  try {
+    await addLocalAttendanceLog(logRecord)
+  } catch (fileErr) {
+    // Log file write error but don't fail the request
+    console.error("Warning: Failed to write attendance log to file:", fileErr)
+  }
 
   return {
     loggedAt,

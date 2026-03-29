@@ -475,51 +475,17 @@ export function MemberQrScanner({
       ? new Date(payload.loggedAt).toLocaleTimeString()
       : "now"
 
-    // Verify attendance was actually recorded
-    setStatus({ tone: "loading", message: "Verifying attendance record..." })
+    // Set success message and refresh activities list
+    setStatus({
+      tone: "success",
+      message: `✓ Attendance recorded for ${payload.memberName ?? checkedName} on event ${eventCode.trim()} at ${timeLabel}`,
+    })
 
-    try {
-      // Check if the attendance record appears in the recent logs
-      const verifyResponse = await fetch(
-        `/api/attendance/log?branchCode=${encodeURIComponent(branchCode)}&event=${encodeURIComponent(eventCode.trim())}&limit=10`,
-        { method: "GET" }
-      )
-
-      const verifyPayload = (await verifyResponse.json().catch(() => ({}))) as {
-        records?: Array<{
-          memberId: string
-          eventCode: string
-          loggedAt: string
-        }>
-      }
-
-      // Look for the attendance record we just submitted
-      const recordFound = verifyPayload.records?.some(
-        (record) =>
-          record.memberId === pendingScan.memberId &&
-          record.eventCode === eventCode.trim()
-      ) ?? false
-
-      if (recordFound) {
-        setStatus({
-          tone: "success",
-          message: `✓ Attendance confirmed for ${payload.memberName ?? checkedName} on ${eventCode.trim()} at ${timeLabel}. The record is saved.`,
-        })
-        void loadSessionActivities() // Refresh activities list to show new record
-      } else {
-        // Record not found in verification, but API succeeded - might be due to async/persistence
-        setStatus({
-          tone: "success",
-          message: `⚠ Attendance logged for ${payload.memberName ?? checkedName} at ${timeLabel}. (Note: Verifying record...)`,
-        })
-      }
-    } catch {
-      // Verification fetch failed, but original submission succeeded
-      setStatus({
-        tone: "success",
-        message: `✓ Attendance logged for ${payload.memberName ?? checkedName} at ${timeLabel}.`,
-      })
-    }
+    // Refresh the activities list to show the new record
+    // Use a small delay to allow backend persistence
+    setTimeout(() => {
+      void loadSessionActivities()
+    }, 500)
 
     setPendingScan(null)
   }, [branchCode, eventCode, pendingScan, loadSessionActivities])

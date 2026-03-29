@@ -22,14 +22,20 @@ async function readLogs(): Promise<LocalAttendanceLog[]> {
     const raw = await readFile(STORE_FILE, "utf8")
     const parsed = JSON.parse(raw) as LocalAttendanceLog[]
     return Array.isArray(parsed) ? parsed : []
-  } catch {
+  } catch (err) {
+    // File doesn't exist yet or is empty - return empty array
     return []
   }
 }
 
 async function writeLogs(logs: LocalAttendanceLog[]): Promise<void> {
-  await mkdir(STORE_DIR, { recursive: true })
-  await writeFile(STORE_FILE, JSON.stringify(logs, null, 2), "utf8")
+  try {
+    await mkdir(STORE_DIR, { recursive: true })
+    await writeFile(STORE_FILE, JSON.stringify(logs, null, 2), "utf8")
+  } catch (err) {
+    console.error(`Failed to write attendance logs to ${STORE_FILE}:`, err)
+    throw new Error(`Failed to persist attendance log: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 export async function addLocalAttendanceLog(log: LocalAttendanceLog): Promise<void> {
