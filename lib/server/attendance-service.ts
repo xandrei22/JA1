@@ -772,26 +772,6 @@ export async function createAttendanceSession(
         inMemoryAttendanceSessions.push(result)
         await addLocalAttendanceSession(result)
         return result
-      }
-
-      console.log("[createAttendanceSession] Branch not found, session created but NOT persisted to database")
-      const result: AttendanceSessionResult = {
-        branchCode: input.branchCode,
-        eventCode,
-        eventName: input.eventName,
-        eventPlace: input.eventPlace,
-        eventDate: input.eventDate,
-        eventStartTime: input.eventStartTime,
-        eventEndTime: input.eventEndTime,
-        backupCode,
-        qrPayload,
-        generatedAt,
-        persisted: false,
-        note: "Branch record not found in events table. Session code was still generated.",
-      }
-      inMemoryAttendanceSessions.push(result)
-      await addLocalAttendanceSession(result)
-      return result
     } catch (err) {
       console.error("[createAttendanceSession] Error creating session:", err)
       const result: AttendanceSessionResult = {
