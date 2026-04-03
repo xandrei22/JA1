@@ -507,16 +507,34 @@ export function MemberQrScanner({
       `/api/attendance/member-info?memberCode=${encodeURIComponent(normalizedCode)}`
     )
 
+    console.log("[Member Code Resolution]", {
+      code: normalizedCode,
+      status: response.status,
+      statusText: response.statusText,
+    })
+
     const payload = (await response.json().catch(() => ({}))) as {
       error?: string
       memberId?: string
       memberName?: string
     }
 
+    console.log("[Member Code Response]", payload)
+
     if (!response.ok || !payload.memberId) {
+      let errorMsg = payload.error ?? "Unable to resolve member from typed code."
+      
+      // Provide helpful guidance for different code formats
+      if (normalizedCode.startsWith("FRIDAY-EVENT") || normalizedCode.includes("-EVENT-")) {
+        errorMsg = "Event codes cannot be used for attendance. You need your personal member backup code (format: JA1-BRANCH-YEAR-XXXX). Contact your supervising pastor to get your backup code."
+      } else if (normalizedCode.length > 40) {
+        errorMsg = "Code not found. If this is a QR token, please scan instead of typing. Or contact your supervising pastor for your backup code."
+      }
+      
+      console.warn("[Member Code Error]", errorMsg)
       setStatus({
         tone: "error",
-        message: payload.error ?? "Unable to resolve member from typed code.",
+        message: errorMsg,
       })
       return
     }
@@ -1153,7 +1171,7 @@ export function MemberQrScanner({
           <DialogContent className="max-w-md">
             <DialogTitle>Type Member Equivalent Code</DialogTitle>
             <DialogDescription>
-              Type the member code manually (QR token or backup code), then confirm name before submit.
+              Use your personal member backup code (format: JA1-BRANCH-YEAR-XXXX, e.g., JA1-DMNTY-2026-AB12). Contact your supervising pastor if you don't have one.
             </DialogDescription>
 
             <div className="mt-4 grid gap-3">
@@ -1163,7 +1181,7 @@ export function MemberQrScanner({
                   ref={manualCodeInputRef}
                   value={typedMemberCode}
                   onChange={(event) => setTypedMemberCode(event.target.value)}
-                  placeholder="e.g. CODE-AB12CD"
+                  placeholder="e.g. JA1-DMNTY-2026-AB12"
                 />
               </div>
               <div className="flex gap-2">
