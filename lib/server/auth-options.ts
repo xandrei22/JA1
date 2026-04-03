@@ -1,11 +1,12 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
+import { randomUUID } from "crypto"
 
 import { findLocalAdminByEmail } from "@/lib/server/local-admin-store"
 import { verifyPassword } from "@/lib/server/password"
 import { normalizeOperationalRole, resolveRoleByEmail, ROLES, type Role } from "@/lib/server/rbac"
-import { isSupabaseConfigured, selectSupabaseSingle } from "@/lib/server/supabase-admin"
+import { isSupabaseConfigured, selectSupabaseSingle, insertSupabaseRow } from "@/lib/server/supabase-admin"
 
 // In-memory storage for admins created when Supabase is unavailable
 type SeedUser = {
@@ -205,9 +206,52 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        const incomingRole = (user as { role?: string }).role
-        token.role = resolveSafeRole(incomingRole, user.email ?? "")
-        token.branchCode = (user as { branchCode?: string | null }).branchCode ?? null
+        const email = user.email?.toLowerCase().trim() ?? ""
+        let branchCode = (user as { branchCode?: string | null }).branchCode ?? null
+        let role = (user as { role?: string }).role
+
+        // If this is a new login (Google or other provider not in central_users yet)
+        // automatically create the user in central_users
+        if (isSupabaseConfigured() && email) {
+          try {
+            const existingUser = await selectSupabaseSingle<CentralUserRow>("central_users", {
+              email,
+            })
+
+            if (!existingUser) {
+              // User doesn't exist in central_users yet - create them with default branch
+              const newUserId = randomUUID()
+              const defaultBranchCode = "DUM"
+              
+              await insertSupabaseRow("central_users", {
+                id: newUserId,
+                email,
+                password_hash: "", // OAuth users don't have passwords
+                full_name: user.name ?? email,
+                branch_code: defaultBranchCode,
+                age_group: null,
+                role: null,
+                is_active: true,
+              })
+
+              console.log("[Auth] Auto-created user in central_users:", { email, defaultBranchCode })
+              
+              branchCode = defaultBranchCode
+            } else {
+              // User exists - use their stored branch_code
+              branchCode = existingUser.branch_code
+              role = existingUser.role ?? role
+            }
+          } catch (err) {
+            console.warn("[Auth] Failed to auto-create/retrieve user from central_users:", err)
+            // Continue with what we have - don't block login
+            if (!branchCode) branchCode = "DUM"
+          }
+        }
+
+        const incomingRole = role
+        token.role = resolveSafeRole(incomingRole, email)
+        token.branchCode = branchCode
         token.ageGroup = (user as { ageGroup?: string | null }).ageGroup ?? null
       }
 
