@@ -187,9 +187,9 @@ $$;
 
 alter table public.profiles enable row level security;
 alter table public.members enable row level security;
-alter table public.events enable row level security;
+alter table public.events disable row level security;
 alter table public.member_credentials enable row level security;
-alter table public.attendance_logs enable row level security;
+alter table public.attendance_logs disable row level security;
 alter table public.first_timer_records enable row level security;
 
 create policy profiles_select_self_or_higher
