@@ -653,11 +653,18 @@ export async function resolveEventCodeBySessionBackupCode(code: string): Promise
     try {
       // Look for events by backup code in the events table
       const events = await selectSupabaseRows<{
+        id: string
         event_code: string
-        backup_code: string
+        backup_code: string | null
       }>({
         table: "events",
         limit: 100,
+      })
+
+      console.log("[resolveEventCodeBySessionBackupCode] Fetched events from Supabase:", {
+        totalEvents: events.length,
+        eventsWithBackupCodes: events.filter(e => e.backup_code).length,
+        sampleBackupCodes: events.slice(0, 3).map(e => ({ event_code: e.event_code, backup_code: e.backup_code }))
       })
 
       const match = events.find(
@@ -668,8 +675,12 @@ export async function resolveEventCodeBySessionBackupCode(code: string): Promise
         console.log("[resolveEventCodeBySessionBackupCode] Found in Supabase events table:", match.event_code)
         return match.event_code
       }
+
+      console.log("[resolveEventCodeBySessionBackupCode] No matching event found in Supabase. Looking for code:", normalizedCode)
     } catch (err) {
       console.warn("[resolveEventCodeBySessionBackupCode] Supabase events lookup failed:", err)
+      console.warn("[resolveEventCodeBySessionBackupCode] This might be because backup_code column doesn't exist. Run this in Supabase SQL Editor:")
+      console.warn("alter table public.events add column if not exists backup_code text;")
     }
   }
 
@@ -696,12 +707,25 @@ export async function createAttendanceSession(
 
   if (isSupabaseConfigured()) {
     try {
+      console.log("[createAttendanceSession] Looking up branch with code:", input.branchCode)
       const branch = await selectSupabaseSingle<SupabaseBranchRow>("branches", {
         branch_code: input.branchCode,
       })
+      
+      console.log("[createAttendanceSession] Branch lookup result:", {
+        found: !!branch,
+        branch_id: branch?.id,
+        branch_code: branch?.branch_code,
+      })
 
       if (branch?.id) {
-        await insertSupabaseRow("events", {
+        console.log("[createAttendanceSession] Found branch, inserting event with backup_code:", {
+          branch_id: branch.id,
+          event_code: eventCode,
+          backup_code: backupCode,
+        })
+        
+        const insertResult = await insertSupabaseRow("events", {
           event_code: eventCode,
           title: input.eventName,
           branch_id: branch.id,
@@ -709,6 +733,8 @@ export async function createAttendanceSession(
           backup_code: backupCode,
           created_by: input.createdByUserId,
         })
+        
+        console.log("[createAttendanceSession] Event insert result:", insertResult)
 
         const result: AttendanceSessionResult = {
           branchCode: input.branchCode,
@@ -729,6 +755,7 @@ export async function createAttendanceSession(
         return result
       }
 
+      console.log("[createAttendanceSession] Branch not found, session created but NOT persisted to database")
       const result: AttendanceSessionResult = {
         branchCode: input.branchCode,
         eventCode,
@@ -746,7 +773,8 @@ export async function createAttendanceSession(
       inMemoryAttendanceSessions.push(result)
       await addLocalAttendanceSession(result)
       return result
-    } catch {
+    } catch (err) {
+      console.error("[createAttendanceSession] Error creating session:", err)
       const result: AttendanceSessionResult = {
         branchCode: input.branchCode,
         eventCode,
@@ -814,6 +842,7 @@ export async function getLatestAttendanceSession(branchCode: string): Promise<At
           event_code: string
           title: string
           starts_at: string
+          backup_code: string | null
         }>({
           table: "events",
           filters: { branch_id: branch.id },
@@ -837,13 +866,14 @@ export async function getLatestAttendanceSession(branchCode: string): Promise<At
           eventDate: datePart ?? "",
           eventStartTime: time ?? "",
           eventEndTime: "",
-          backupCode: "",
+          backupCode: ev.backup_code ?? "",
           qrPayload: "",
           generatedAt: new Date().toISOString(),
           persisted: true,
         }
       }
-    } catch {
+    } catch (err) {
+      console.error("[getLatestAttendanceSession] Error loading from Supabase:", err)
       // fall through to in-memory check
     }
   }
