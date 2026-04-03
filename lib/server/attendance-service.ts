@@ -730,6 +730,7 @@ export async function createAttendanceSession(
           title: input.eventName,
           branch_id: branch.id,
           starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
+          ends_at: `${input.eventDate}T${input.eventEndTime}:00Z`,
           backup_code: backupCode,
           created_by: input.createdByUserId,
         })
@@ -744,6 +745,7 @@ export async function createAttendanceSession(
             event_code: eventCode,
             title: input.eventName,
             starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
+            ends_at: `${input.eventDate}T${input.eventEndTime}:00Z`,
             backup_code: backupCode,
             created_by: input.createdByUserId,
           })
