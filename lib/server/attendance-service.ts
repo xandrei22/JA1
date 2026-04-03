@@ -93,6 +93,34 @@ type SupabaseMemberCredentialRow = {
 const inMemoryAttendanceLogs: AttendanceLogRecord[] = []
 const inMemoryAttendanceSessions: AttendanceSessionResult[] = []
 
+/**
+ * Look up an event ID by event code.
+ * This is critical for properly linking attendance logs to events.
+ */
+async function lookupEventId(eventCode: string): Promise<string | null> {
+  if (!isSupabaseConfigured()) {
+    return null
+  }
+
+  try {
+    console.log("[lookupEventId] Looking up event with code:", eventCode)
+    const event = await selectSupabaseSingle<{ id: string }>("events", {
+      event_code: eventCode,
+    })
+
+    if (!event?.id) {
+      console.warn("[lookupEventId] Event not found for code:", eventCode)
+      return null
+    }
+
+    console.log("[lookupEventId] Found event ID:", event.id)
+    return event.id
+  } catch (err) {
+    console.error("[lookupEventId] Error looking up event:", err)
+    return null
+  }
+}
+
 export async function issueMemberCredential(
   memberId: string,
   branchCode: string
@@ -212,9 +240,22 @@ export async function logAttendance(input: AttendanceLogInput) {
 
   if (isSupabaseConfigured()) {
     try {
-      console.log("[logAttendance] Inserting to Supabase attendance_logs table")
+      console.log("[logAttendance] Looking up event ID for event code:", input.eventCode)
+      
+      // Critical: Look up the event_id to establish proper relationship
+      const eventId = await lookupEventId(input.eventCode)
+      
+      if (!eventId) {
+        throw new Error(
+          `Event with code '${input.eventCode}' was not found in database. ` +
+          `The event may not have been created yet. Please create the event first.`
+        )
+      }
+
+      console.log("[logAttendance] Inserting to Supabase attendance_logs table with event_id:", eventId)
       const inserted = await insertSupabaseRow("attendance_logs", {
         member_id: input.memberId,
+        event_id: eventId,  // CRITICAL: Now properly linked to events table
         event_code: input.eventCode,
         branch_code: input.branchCode,
         method: input.method,
@@ -225,6 +266,7 @@ export async function logAttendance(input: AttendanceLogInput) {
 
       console.log("[logAttendance] Successfully inserted to Supabase:", {
         insertedRecord: inserted,
+        eventId: eventId,
       })
 
       inMemoryAttendanceLogs.push(logRecord)
@@ -718,14 +760,16 @@ export async function createAttendanceSession(
         branch_code: branch?.branch_code,
       })
 
+      let insertResult: unknown
+      
       if (branch?.id) {
-        console.log("[createAttendanceSession] Found branch, inserting event with backup_code:", {
+        console.log("[createAttendanceSession] Found branch, inserting event with branch_id:", {
           branch_id: branch.id,
           event_code: eventCode,
           backup_code: backupCode,
         })
         
-        const insertResult = await insertSupabaseRow("events", {
+        insertResult = await insertSupabaseRow("events", {
           event_code: eventCode,
           title: input.eventName,
           branch_id: branch.id,
@@ -735,13 +779,14 @@ export async function createAttendanceSession(
           created_by: input.createdByUserId,
         })
         
-        console.log("[createAttendanceSession] Event insert result:", insertResult)
+        console.log("[createAttendanceSession] Event insert with branch succeeded:", insertResult)
       } else {
-        console.log("[createAttendanceSession] Branch not found, but still inserting event with fallback (no branch_id)")
+        console.warn("[createAttendanceSession] Branch not found with code:", input.branchCode)
+        console.log("[createAttendanceSession] Inserting event without branch_id as fallback")
         
         // Try to insert event without branch_id as fallback
         try {
-          const insertResult = await insertSupabaseRow("events", {
+          insertResult = await insertSupabaseRow("events", {
             event_code: eventCode,
             title: input.eventName,
             starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
@@ -757,25 +802,35 @@ export async function createAttendanceSession(
         }
       }
 
-        const result: AttendanceSessionResult = {
-          branchCode: input.branchCode,
-          eventCode,
-          eventName: input.eventName,
-          eventPlace: input.eventPlace,
-          eventDate: input.eventDate,
-          eventStartTime: input.eventStartTime,
-          eventEndTime: input.eventEndTime,
-          backupCode,
-          qrPayload,
-          generatedAt,
-          persisted: true,
-        }
+      // Verify the event was actually created
+      if (!insertResult) {
+        throw new Error("Event creation returned no result from database")
+      }
 
-        inMemoryAttendanceSessions.push(result)
-        await addLocalAttendanceSession(result)
-        return result
+      const result: AttendanceSessionResult = {
+        branchCode: input.branchCode,
+        eventCode,
+        eventName: input.eventName,
+        eventPlace: input.eventPlace,
+        eventDate: input.eventDate,
+        eventStartTime: input.eventStartTime,
+        eventEndTime: input.eventEndTime,
+        backupCode,
+        qrPayload,
+        generatedAt,
+        persisted: true,
+      }
+
+      console.log("[createAttendanceSession] Event successfully created and persisted:", {
+        eventCode,
+        persisted: true,
+      })
+
+      inMemoryAttendanceSessions.push(result)
+      await addLocalAttendanceSession(result)
+      return result
     } catch (err) {
-      console.error("[createAttendanceSession] Error creating session:", err)
+      console.error("[createAttendanceSession] Error creating session in Supabase:", err)
       const result: AttendanceSessionResult = {
         branchCode: input.branchCode,
         eventCode,
@@ -788,7 +843,7 @@ export async function createAttendanceSession(
         qrPayload,
         generatedAt,
         persisted: false,
-        note: "Event persistence failed. Session code was still generated.",
+        note: `Event creation failed: ${err instanceof Error ? err.message : String(err)}. Session code was still generated.`,
       }
       inMemoryAttendanceSessions.push(result)
       await addLocalAttendanceSession(result)
