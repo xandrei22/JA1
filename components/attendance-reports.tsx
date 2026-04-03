@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, X } from "lucide-react"
 
 type AttendanceRecord = {
   memberId: string
@@ -19,9 +19,18 @@ type AttendanceRecord = {
   loggedAt: string
 }
 
+type AvailableEvent = {
+  eventCode: string
+  title: string
+  startsAt?: string
+  backupCode?: string
+}
+
 export function AttendanceReports({ branchCode }: { branchCode: string }) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [availableEvents, setAvailableEvents] = useState<AvailableEvent[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [showEventDropdown, setShowEventDropdown] = useState(false)
   const [eventFilter, setEventFilter] = useState("")
   const [startDate, setStartDate] = useState<string | null>(null)
   const [endDate, setEndDate] = useState<string | null>(null)
@@ -29,6 +38,16 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
   const [endTime, setEndTime] = useState<string | null>(null)
   const [message, setMessage] = useState("Loading attendance logs...")
   const [isPersisted, setIsPersisted] = useState(false)
+
+  const loadAvailableEvents = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/attendance/events?branchCode=${encodeURIComponent(branchCode)}&limit=50`)
+      const payload = (await res.json().catch(() => ({}))) as { events?: AvailableEvent[] }
+      setAvailableEvents(payload.events ?? [])
+    } catch (err) {
+      console.error("Failed to load available events:", err)
+    }
+  }, [branchCode])
 
   const loadRecords = useCallback(async () => {
     setIsLoading(true)
@@ -80,7 +99,8 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
   // Load initial data on mount
   useEffect(() => {
     loadRecords()
-  }, [branchCode])
+    loadAvailableEvents()
+  }, [branchCode, loadRecords, loadAvailableEvents])
 
   const downloadReport = useCallback(
     async (format: "csv" | "excel" | "pdf") => {
@@ -152,13 +172,60 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
           <p className="mb-1 text-sm font-medium">Branch Code</p>
           <Input value={branchCode} readOnly />
         </div>
-        <div>
-          <p className="mb-1 text-sm font-medium">Filter by Event Code</p>
-          <Input
-            value={eventFilter}
-            onChange={(event) => setEventFilter(event.target.value)}
-            placeholder="e.g. SUNDAY-SERVICE"
-          />
+        <div className="relative">
+          <p className="mb-1 text-sm font-medium">Select Event</p>
+          <div className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => setShowEventDropdown(!showEventDropdown)}
+            >
+              <span className="truncate">
+                {eventFilter ? `${eventFilter}` : "Choose an event..."}
+              </span>
+              <ChevronDown className="size-4" />
+            </Button>
+
+            {showEventDropdown && availableEvents.length > 0 && (
+              <div className="absolute top-full z-50 mt-1 w-full border bg-background rounded-md shadow-lg max-h-48 overflow-y-auto">
+                {availableEvents.map((event) => (
+                  <button
+                    key={event.eventCode}
+                    type="button"
+                    onClick={() => {
+                      setEventFilter(event.eventCode)
+                      setShowEventDropdown(false)
+                      loadRecords()
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-b-0 text-sm transition"
+                  >
+                    <div className="font-medium">{event.eventCode}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {event.title}
+                      {event.backupCode && ` • ${event.backupCode}`}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {eventFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEventFilter("")
+                  setShowEventDropdown(false)
+                }}
+                className="absolute right-3 top-9 text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+          {!availableEvents.length && (
+            <p className="mt-1 text-xs text-muted-foreground">No events available yet</p>
+          )}
         </div>
         <div>
           <p className="mb-1 text-sm font-medium">Start Date</p>
@@ -180,6 +247,31 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
 
       <p className="mt-4 text-sm text-muted-foreground">{message}</p>
 
+      {availableEvents.length > 0 && !eventFilter && (
+        <div className="mt-4 rounded-lg bg-muted/30 border border-muted/50 p-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Available Events:</p>
+          <div className="flex flex-wrap gap-2">
+            {availableEvents.slice(0, 10).map((event) => (
+              <button
+                key={event.eventCode}
+                type="button"
+                onClick={() => {
+                  setEventFilter(event.eventCode)
+                  loadRecords()
+                }}
+                className="text-xs px-3 py-1 rounded-full bg-background border border-muted-foreground/30 hover:border-foreground/50 hover:bg-muted/50 transition"
+                title={event.title}
+              >
+                {event.eventCode}
+              </button>
+            ))}
+            {availableEvents.length > 10 && (
+              <span className="text-xs text-muted-foreground py-1">+{availableEvents.length - 10} more</span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={loadRecords} disabled={isLoading}>
@@ -187,7 +279,7 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" disabled={isLoading}>
+              <Button type="button" disabled={isLoading || records.length === 0}>
                 Download <ChevronDown className="ml-2 size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -203,9 +295,6 @@ export function AttendanceReports({ branchCode }: { branchCode: string }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-        <div className="ml-auto">
-          <Input placeholder="Search events..." value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} />
         </div>
       </div>
 
