@@ -735,6 +735,25 @@ export async function createAttendanceSession(
         })
         
         console.log("[createAttendanceSession] Event insert result:", insertResult)
+      } else {
+        console.log("[createAttendanceSession] Branch not found, but still inserting event with fallback (no branch_id)")
+        
+        // Try to insert event without branch_id as fallback
+        try {
+          const insertResult = await insertSupabaseRow("events", {
+            event_code: eventCode,
+            title: input.eventName,
+            starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
+            backup_code: backupCode,
+            created_by: input.createdByUserId,
+          })
+          
+          console.log("[createAttendanceSession] Event insert without branch succeeded:", insertResult)
+        } catch (insertErr) {
+          console.error("[createAttendanceSession] Event insert without branch failed:", insertErr)
+          throw insertErr
+        }
+      }
 
         const result: AttendanceSessionResult = {
           branchCode: input.branchCode,

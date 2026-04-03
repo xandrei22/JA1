@@ -78,7 +78,7 @@ create table if not exists public.events (
   id uuid primary key default gen_random_uuid(),
   event_code text not null unique,
   title text not null,
-  branch_id uuid not null references public.branches(id),
+  branch_id uuid references public.branches(id),
   starts_at timestamptz not null,
   ends_at timestamptz,
   backup_code text,
