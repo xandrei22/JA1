@@ -168,6 +168,15 @@ export async function POST(request: Request) {
       loggedAt?: string
     }
 
+    console.log("[Attendance Log] Request body:", {
+      memberId: body.memberId,
+      memberName: body.memberName,
+      eventCode: body.eventCode,
+      method: body.method,
+      sessionUserId: session.user.id,
+      sessionUserEmail: session.user.email,
+    })
+
     let memberId = body.memberId?.trim() ?? ""
 
     if (!memberId && body.method === "qr" && body.sourceCode) {
@@ -185,6 +194,8 @@ export async function POST(request: Request) {
     const memberName = body.memberName?.trim() ?? ""
     const eventCode = body.eventCode?.trim() ?? ""
     const sourceCode = body.sourceCode?.trim() ?? ""
+
+    console.log("[Attendance Log] Resolved memberId:", memberId)
 
     if (!memberId || !eventCode || !body.method || !sourceCode) {
       return NextResponse.json(

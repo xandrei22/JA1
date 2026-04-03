@@ -8,6 +8,7 @@ import {
   insertSupabaseRow,
   isSupabaseConfigured,
   selectSupabaseSingle,
+  selectSupabaseRows,
 } from "@/lib/server/supabase-admin"
 
 type SignupPayload = {
@@ -110,6 +111,40 @@ export async function POST(request: Request) {
     age_group: resolvedAgeGroup,
     is_active: true,
   })
+
+  // Also create a corresponding member record so they can log attendance
+  if (created?.id) {
+    try {
+      // Get the branch and age group IDs
+      const branchRow = await selectSupabaseSingle<{ id: string }>("branches", {
+        branch_code: branchCode,
+      })
+      const ageGroupRow = await selectSupabaseSingle<{ id: string }>("age_groups", {
+        code: resolvedAgeGroup,
+      })
+
+      if (branchRow?.id && ageGroupRow?.id) {
+        const memberNo = `${branchCode}-${created.id.slice(0, 8).toUpperCase()}`
+        await insertSupabaseRow("members", {
+          id: created.id, // Use the same ID as central_users so they match
+          member_no: memberNo,
+          full_name: fullName,
+          branch_id: branchRow.id,
+          age_group_id: ageGroupRow.id,
+          is_first_timer: true,
+          is_active: true,
+        })
+        console.log("[Signup] Created member record:", {
+          memberId: created.id,
+          memberNo,
+          email,
+        })
+      }
+    } catch (err) {
+      console.warn("[Signup] Failed to create member record:", err)
+      // Don't fail signup if member creation fails - they can be manually enrolled later
+    }
+  }
 
   return NextResponse.json(
     {

@@ -81,9 +81,12 @@ create table if not exists public.events (
   branch_id uuid not null references public.branches(id),
   starts_at timestamptz not null,
   ends_at timestamptz,
+  backup_code text,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
 );
+
+alter table public.events add column if not exists backup_code text;
 
 create table if not exists public.member_credentials (
   id uuid primary key default gen_random_uuid(),

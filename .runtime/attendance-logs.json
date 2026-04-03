@@ -1,0 +1,20 @@
+[
+  {
+    "memberId": "111919816134166671260",
+    "eventCode": "TEST-DATA-20260403-E6B8",
+    "branchCode": "DUM",
+    "method": "manual",
+    "sourceCode": "JA1-DMNTY-2026-9F43",
+    "loggedByUserId": "111919816134166671260",
+    "loggedAt": "2026-04-03T03:37:42.199Z"
+  },
+  {
+    "memberId": "111919816134166671260",
+    "eventCode": "TEST-DATA-20260403-E6B8",
+    "branchCode": "DUM",
+    "method": "manual",
+    "sourceCode": "JA1-DMNTY-2026-9F43",
+    "loggedByUserId": "111919816134166671260",
+    "loggedAt": "2026-04-03T03:37:54.650Z"
+  }
+]

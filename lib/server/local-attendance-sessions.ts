@@ -49,8 +49,13 @@ export async function addLocalAttendanceSession(session: LocalAttendanceSession)
 export async function listLocalAttendanceSessions(branchCode: string, limit = 50): Promise<LocalAttendanceSession[]> {
   const normalizedBranch = branchCode.trim().toUpperCase()
   const sessions = await readSessions()
-  return sessions
-    .filter((entry) => entry.branchCode.toUpperCase() === normalizedBranch)
+  
+  // If branch code is empty, return all sessions; otherwise filter by branch
+  const filtered = normalizedBranch 
+    ? sessions.filter((entry) => entry.branchCode.toUpperCase() === normalizedBranch)
+    : sessions
+  
+  return filtered
     .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime())
     .slice(0, Math.max(1, Math.min(limit, 200)))
 }

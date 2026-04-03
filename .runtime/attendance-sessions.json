@@ -40,5 +40,19 @@
     "generatedAt": "2026-03-29T08:24:59.260Z",
     "persisted": false,
     "note": "Event persistence failed. Session code was still generated."
+  },
+  {
+    "branchCode": "DMNTY",
+    "eventCode": "TEST-DATA-20260403-E6B8",
+    "eventName": "TEST DATA",
+    "eventPlace": "DUMANTAY",
+    "eventDate": "2026-04-03",
+    "eventStartTime": "12:00",
+    "eventEndTime": "14:00",
+    "backupCode": "JA1-DMNTY-2026-9F43",
+    "qrPayload": "{\"type\":\"attendance_session\",\"branchCode\":\"DMNTY\",\"eventCode\":\"TEST-DATA-20260403-E6B8\",\"eventName\":\"TEST DATA\",\"eventPlace\":\"DUMANTAY\",\"eventDate\":\"2026-04-03\",\"eventStartTime\":\"12:00\",\"eventEndTime\":\"14:00\",\"eventTime\":\"12:00\",\"equivalentCode\":\"JA1-DMNTY-2026-9F43\",\"issuedAt\":\"2026-04-03T03:33:46.206Z\"}",
+    "generatedAt": "2026-04-03T03:33:46.191Z",
+    "persisted": false,
+    "note": "Event persistence failed. Session code was still generated."
   }
 ]

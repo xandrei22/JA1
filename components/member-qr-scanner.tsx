@@ -83,6 +83,7 @@ export function MemberQrScanner({
   const [sessionActivities, setSessionActivities] = useState<AttendanceSessionPayload[]>([])
   const [isLoadingActivities, setIsLoadingActivities] = useState(false)
   const [pendingScan, setPendingScan] = useState<PendingScan | null>(null)
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([])
   const [selectedCameraId, setSelectedCameraId] = useState<string>("")
   const [isGeneratingSession, setIsGeneratingSession] = useState(false)
@@ -302,6 +303,46 @@ export function MemberQrScanner({
     }
   }, [userRole, userBranch, branchCode])
 
+  const checkAndSetDuplicateWarning = useCallback(async (memberId: string, eventCodeToCheck: string) => {
+    if (!memberId || !eventCodeToCheck) {
+      setDuplicateWarning(null)
+      return
+    }
+
+    try {
+      const url = new URL("/api/attendance/check-duplicate", window.location.origin)
+      url.searchParams.set("memberId", memberId)
+      url.searchParams.set("eventCode", eventCodeToCheck)
+
+      const response = await fetch(url.toString())
+      const result = (await response.json().catch(() => ({}))) as {
+        isDuplicate?: boolean
+        existingRecord?: any
+      }
+
+      if (result.isDuplicate) {
+        setDuplicateWarning(
+          `⚠️ You've already logged attendance for event ${eventCodeToCheck}. ` +
+          `You can only log attendance once per event.`
+        )
+      } else {
+        setDuplicateWarning(null)
+      }
+    } catch (err) {
+      console.warn("[Check Duplicate] Error:", err)
+      setDuplicateWarning(null)
+    }
+  }, [])
+
+  // Check for duplicate attendance when both member and event are available
+  useEffect(() => {
+    if (pendingScan?.memberId && eventCode) {
+      void checkAndSetDuplicateWarning(pendingScan.memberId, eventCode)
+    } else {
+      setDuplicateWarning(null)
+    }
+  }, [pendingScan?.memberId, eventCode, checkAndSetDuplicateWarning])
+
   const stopScanner = useCallback(async () => {
     if (!scannerRef.current) return
 
@@ -490,7 +531,7 @@ export function MemberQrScanner({
     setPendingScan(null)
   }, [branchCode, eventCode, pendingScan, loadSessionActivities])
 
-  const resolveTypedMemberCode = useCallback(async () => {
+  const resolveTypedMemberCode = useCallback(async (): Promise<boolean> => {
     const normalizedCode = typedMemberCode.trim()
 
     if (!normalizedCode) {
@@ -498,7 +539,7 @@ export function MemberQrScanner({
         tone: "error",
         message: "Type a member equivalent code first.",
       })
-      return
+      return false
     }
 
     setStatus({ tone: "loading", message: "Resolving typed member code..." })
@@ -517,26 +558,25 @@ export function MemberQrScanner({
       error?: string
       memberId?: string
       memberName?: string
+      eventCode?: string
     }
 
     console.log("[Member Code Response]", payload)
 
     if (!response.ok || !payload.memberId) {
-      let errorMsg = payload.error ?? "Unable to resolve member from typed code."
-      
-      // Provide helpful guidance for different code formats
-      if (normalizedCode.startsWith("FRIDAY-EVENT") || normalizedCode.includes("-EVENT-")) {
-        errorMsg = "Event codes cannot be used for attendance. You need your personal member backup code (format: JA1-BRANCH-YEAR-XXXX). Contact your supervising pastor to get your backup code."
-      } else if (normalizedCode.length > 40) {
-        errorMsg = "Code not found. If this is a QR token, please scan instead of typing. Or contact your supervising pastor for your backup code."
-      }
-      
+      let errorMsg = payload.error ?? "Unable to resolve code."
       console.warn("[Member Code Error]", errorMsg)
       setStatus({
         tone: "error",
         message: errorMsg,
       })
-      return
+      return false
+    }
+
+    // If eventCode was resolved (from session backup code), auto-fill it
+    if (payload.eventCode) {
+      setEventCode(payload.eventCode)
+      console.log("[Member Code Resolution] Auto-filled event code:", payload.eventCode)
     }
 
     setPendingScan({
@@ -549,8 +589,10 @@ export function MemberQrScanner({
 
     setStatus({
       tone: "idle",
-      message: "Member code resolved. Confirm the name before submitting attendance.",
+      message: "Code resolved successfully. Confirm the name before submitting attendance.",
     })
+    
+    return true
   }, [defaultMemberName, typedMemberCode])
 
   const drawSessionExportCanvas = useCallback(async (session: AttendanceSessionPayload) => {
@@ -1166,7 +1208,11 @@ export function MemberQrScanner({
         {/* Manual code dialog */}
         <Dialog open={manualOpen} onOpenChange={(open) => {
           setManualOpen(open)
-          if (open) manualCodeInputRef.current?.focus()
+          if (open) {
+            manualCodeInputRef.current?.focus()
+            setTypedMemberCode("")
+            setStatus({ tone: "idle", message: "" })
+          }
         }}>
           <DialogContent className="max-w-md">
             <DialogTitle>Type Member Equivalent Code</DialogTitle>
@@ -1184,8 +1230,25 @@ export function MemberQrScanner({
                   placeholder="e.g. JA1-DMNTY-2026-AB12"
                 />
               </div>
+
+              {status.message && (
+                <div className={`rounded-lg p-3 text-sm ${
+                  status.tone === "error" ? "bg-red-50 text-red-900 dark:bg-red-900/20 dark:text-red-200" :
+                  status.tone === "loading" ? "bg-blue-50 text-blue-900 dark:bg-blue-900/20 dark:text-blue-200" :
+                  status.tone === "success" ? "bg-green-50 text-green-900 dark:bg-green-900/20 dark:text-green-200" :
+                  "bg-gray-50 text-gray-900 dark:bg-gray-900/20 dark:text-gray-200"
+                }`}>
+                  {status.message}
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <Button type="button" onClick={async () => { await resolveTypedMemberCode(); setManualOpen(false) }}>
+                <Button type="button" onClick={async () => { 
+                  const success = await resolveTypedMemberCode()
+                  if (success) {
+                    setManualOpen(false)
+                  }
+                }}>
                   Use Typed Code
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setManualOpen(false)}>
@@ -1273,6 +1336,12 @@ export function MemberQrScanner({
               </div>
             </div>
 
+            {duplicateWarning && (
+              <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3">
+                <p className="text-sm text-yellow-800">{duplicateWarning}</p>
+              </div>
+            )}
+
             <div className="border-t pt-3">
               <p className="mb-2 text-sm font-medium">Confirm Member Name</p>
               <Input
@@ -1295,7 +1364,7 @@ export function MemberQrScanner({
               <Button 
                 type="button" 
                 onClick={submitConfirmedAttendance} 
-                disabled={isConfirmingName}
+                disabled={isConfirmingName || !!duplicateWarning}
                 className="flex-1"
               >
                 {isConfirmingName ? "Processing..." : "✓ Confirm & Log"}

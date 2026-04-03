@@ -52,7 +52,7 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
     const normalizedMemberId = memberId.trim()
 
     if (!normalizedMemberId) {
-      setMessage("Member ID is required.")
+      setMessage("Please enter a member ID, email, or member number.")
       return
     }
 
@@ -74,36 +74,54 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
     setIsLoading(false)
 
     if (!response.ok) {
-      setMessage(payload.error ?? "Failed to issue credential.")
+      let errorMsg = payload.error ?? "Failed to issue credential."
+      if (response.status === 404) {
+        errorMsg = `Member not found: "${normalizedMemberId}". Make sure the member ID, email, or member number is correct.`
+      } else if (response.status === 500) {
+        errorMsg = `Server error: ${payload.error ?? "Failed to create credential"}. Check the server logs.`
+      }
+      setMessage(errorMsg)
       return
     }
 
     setCredential(payload as CredentialResponse)
-    setMessage("Credential issued successfully.")
+    setMessage("✓ Credential issued successfully! Share the backup code with the member.")
   }
 
   return (
     <div id="member-management" className="rounded-xl border bg-card p-5">
       <h3 className="text-lg font-semibold">Member Credential Issuer</h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        Generate a fresh member QR payload with equivalent code for manual typing.
+        Generate a QR code backup code for a member to use for manual attendance entry.
       </p>
+
+      <div className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-900/20 dark:text-blue-200">
+        <p className="font-medium">How to use:</p>
+        <ul className="mt-2 list-inside list-disc space-y-1">
+          <li>Enter the member&apos;s ID, email, or member number</li>
+          <li>The backup code will be displayed (format: JA1-BRANCH-YEAR-XXXX)</li>
+          <li>Share this code with the member for manual attendance entry</li>
+        </ul>
+      </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div>
-          <p className="mb-1 text-sm font-medium">Member ID</p>
+          <p className="mb-1 text-sm font-medium">Member ID / Email / Number</p>
           <Input
             value={memberId}
             onChange={(event) => setMemberId(event.target.value)}
-            placeholder="e.g. member-001"
+            placeholder="e.g. john@example.com or member-001"
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Accept member ID (UUID), email address, or member number
+          </p>
         </div>
         <div>
           <p className="mb-1 text-sm font-medium">Branch Code</p>
           <Input
             value={activeBranch}
             onChange={(event) => setActiveBranch(event.target.value)}
-            placeholder="e.g. MAIN"
+            placeholder="e.g. DMNTY"
           />
         </div>
       </div>
@@ -123,9 +141,10 @@ export function MemberCredentialIssuer({ branchCode }: { branchCode: string }) {
         <div className="mt-4 grid gap-2 rounded-lg border p-3 text-sm">
           <p><span className="font-medium">Member ID:</span> {credential.memberId}</p>
           <p><span className="font-medium">Branch:</span> {credential.branchCode}</p>
-          <p><span className="font-medium">QR Token:</span> {credential.qrToken}</p>
-          <p className="break-all"><span className="font-medium">QR Payload:</span> {credential.qrPayload}</p>
-          <p><span className="font-medium">Equivalent Typed Code:</span> {credential.backupCode}</p>
+          <div className="rounded bg-yellow-50 p-2 dark:bg-yellow-900/20">
+            <p className="font-medium text-yellow-900 dark:text-yellow-200">Backup Code (Share with member):</p>
+            <p className="mt-1 break-all font-mono text-lg font-bold text-yellow-800 dark:text-yellow-100">{credential.backupCode}</p>
+          </div>
           <p><span className="font-medium">Generated:</span> {new Date(credential.generatedAt).toLocaleString()}</p>
         </div>
       ) : null}
