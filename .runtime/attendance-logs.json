@@ -16,5 +16,32 @@
     "sourceCode": "JA1-DMNTY-2026-9F43",
     "loggedByUserId": "111919816134166671260",
     "loggedAt": "2026-04-03T03:37:54.650Z"
+  },
+  {
+    "memberId": "102142643334627374514",
+    "eventCode": "DUM-20260626-D9CF",
+    "branchCode": "DUM",
+    "method": "manual",
+    "sourceCode": "JA1-DMNTY-2026-DD77",
+    "loggedByUserId": "102142643334627374514",
+    "loggedAt": "2026-06-26T13:58:23.676Z"
+  },
+  {
+    "memberId": "102142643334627374514",
+    "eventCode": "WELCOME-TO-JA1-20260626-34FE",
+    "branchCode": "DUM",
+    "method": "manual",
+    "sourceCode": "JA1-DMNTY-2026-15D4",
+    "loggedByUserId": "102142643334627374514",
+    "loggedAt": "2026-06-26T14:17:59.106Z"
+  },
+  {
+    "memberId": "102142643334627374514",
+    "eventCode": "NSAJKSKASXZXDDSD-20260626-6002",
+    "branchCode": "DUM",
+    "method": "manual",
+    "sourceCode": "JA1-DMNTY-2026-1A1A",
+    "loggedByUserId": "102142643334627374514",
+    "loggedAt": "2026-06-26T15:02:48.143Z"
   }
 ]

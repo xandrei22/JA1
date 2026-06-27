@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import Link from "next/link"
 import Image from "next/image"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { type FormEvent, useState } from "react"
 import { Eye, EyeOff } from "lucide-react"
 
@@ -23,9 +23,17 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+
+  const authError = searchParams.get("error")
+  const authErrorMessage = authError
+    ? authError === "CredentialsSignin"
+      ? "Invalid credentials. Please try again."
+      : "Sign-in failed. Please check your account setup and try again."
+    : null
 
   async function handleCredentialsLogin(
     event: FormEvent<HTMLFormElement>
@@ -115,9 +123,9 @@ export function LoginForm({
                   Login
                 </Button>
               </Field>
-              {error ? (
+              {error || authErrorMessage ? (
                 <FieldDescription className="text-destructive text-center">
-                  {error}
+                  {error ?? authErrorMessage}
                 </FieldDescription>
               ) : null}
               <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">

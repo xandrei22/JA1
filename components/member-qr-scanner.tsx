@@ -40,6 +40,9 @@ type AttendanceSessionPayload = {
   backupCode: string
   qrPayload: string
   generatedAt: string
+  createdByUserId?: string
+  createdByUserName?: string | null
+  createdByUserEmail?: string | null
 }
 
 type SessionListResponse = {
@@ -531,8 +534,8 @@ export function MemberQrScanner({
     setPendingScan(null)
   }, [branchCode, eventCode, pendingScan, loadSessionActivities])
 
-  const resolveTypedMemberCode = useCallback(async (): Promise<boolean> => {
-    const normalizedCode = typedMemberCode.trim()
+  const resolveTypedMemberCode = useCallback(async (codeInput?: string): Promise<boolean> => {
+    const normalizedCode = (codeInput ?? manualCodeInputRef.current?.value ?? typedMemberCode).trim()
 
     if (!normalizedCode) {
       setStatus({
@@ -542,17 +545,11 @@ export function MemberQrScanner({
       return false
     }
 
-    setStatus({ tone: "loading", message: "Resolving typed member code..." })
+    setStatus({ tone: "loading", message: "Resolving member code..." })
 
     const response = await fetch(
       `/api/attendance/member-info?memberCode=${encodeURIComponent(normalizedCode)}`
     )
-
-    console.log("[Member Code Resolution]", {
-      code: normalizedCode,
-      status: response.status,
-      statusText: response.statusText,
-    })
 
     const payload = (await response.json().catch(() => ({}))) as {
       error?: string
@@ -561,22 +558,16 @@ export function MemberQrScanner({
       eventCode?: string
     }
 
-    console.log("[Member Code Response]", payload)
-
     if (!response.ok || !payload.memberId) {
-      let errorMsg = payload.error ?? "Unable to resolve code."
-      console.warn("[Member Code Error]", errorMsg)
       setStatus({
         tone: "error",
-        message: errorMsg,
+        message: payload.error ?? "Code not found. Ask your supervising pastor for a valid member backup code.",
       })
       return false
     }
 
-    // If eventCode was resolved (from session backup code), auto-fill it
     if (payload.eventCode) {
       setEventCode(payload.eventCode)
-      console.log("[Member Code Resolution] Auto-filled event code:", payload.eventCode)
     }
 
     setPendingScan({
@@ -591,7 +582,7 @@ export function MemberQrScanner({
       tone: "idle",
       message: "Code resolved successfully. Confirm the name before submitting attendance.",
     })
-    
+
     return true
   }, [defaultMemberName, typedMemberCode])
 
@@ -1061,7 +1052,7 @@ export function MemberQrScanner({
               </Button>
             </div>
 
-            {sessionPayload ? (
+            {sessionPayload && sessionPayload.qrPayload ? (
               <div className="mt-4 grid gap-4 lg:grid-cols-[240px_1fr]">
                 <div className="rounded-md border bg-background p-4">
                   <div ref={qrCanvasContainerRef} className="flex justify-center">
@@ -1125,6 +1116,7 @@ export function MemberQrScanner({
                         <th className="px-2 py-2">Date</th>
                         <th className="px-2 py-2">Time</th>
                         <th className="px-2 py-2">Event Code</th>
+                        <th className="px-2 py-2">Creator</th>
                         <th className="px-2 py-2">Manual Code</th>
                         <th className="px-2 py-2">Status</th>
                         <th className="px-2 py-2">Actions</th>
@@ -1140,6 +1132,18 @@ export function MemberQrScanner({
                             <td className="px-2 py-2">{activity.eventDate}</td>
                             <td className="px-2 py-2">{activity.eventStartTime} - {activity.eventEndTime || "--:--"}</td>
                             <td className="px-2 py-2">{activity.eventCode}</td>
+                            <td className="px-2 py-2">
+                              <div className="flex flex-col gap-1">
+                                <span className="font-medium">
+                                  {activity.createdByUserName?.trim() || activity.createdByUserEmail?.trim() || activity.createdByUserId || "Unknown"}
+                                </span>
+                                {activity.createdByUserEmail ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {activity.createdByUserEmail}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
                             <td className="px-2 py-2 font-mono">{activity.backupCode}</td>
                             <td className="px-2 py-2">
                               <span className={active ? "text-emerald-600" : "text-muted-foreground"}>
@@ -1217,10 +1221,19 @@ export function MemberQrScanner({
           <DialogContent className="max-w-md">
             <DialogTitle>Type Member Equivalent Code</DialogTitle>
             <DialogDescription>
-              Use your personal member backup code (format: JA1-BRANCH-YEAR-XXXX, e.g., JA1-DMNTY-2026-AB12). Contact your supervising pastor if you don't have one.
+              Use your personal member backup code (format: JA1-BRANCH-YEAR-XXXX, e.g., JA1-DMNTY-2026-AB12). Contact your supervising pastor if you don&apos;t have one.
             </DialogDescription>
 
-            <div className="mt-4 grid gap-3">
+            <form
+              className="mt-4 grid gap-3"
+              onSubmit={async (event) => {
+                event.preventDefault()
+                const success = await resolveTypedMemberCode(typedMemberCode)
+                if (success) {
+                  setManualOpen(false)
+                }
+              }}
+            >
               <div>
                 <p className="mb-1 text-sm font-medium">Member Code</p>
                 <Input
@@ -1228,6 +1241,7 @@ export function MemberQrScanner({
                   value={typedMemberCode}
                   onChange={(event) => setTypedMemberCode(event.target.value)}
                   placeholder="e.g. JA1-DMNTY-2026-AB12"
+                  autoComplete="off"
                 />
               </div>
 
@@ -1243,19 +1257,14 @@ export function MemberQrScanner({
               )}
 
               <div className="flex gap-2">
-                <Button type="button" onClick={async () => { 
-                  const success = await resolveTypedMemberCode()
-                  if (success) {
-                    setManualOpen(false)
-                  }
-                }}>
+                <Button type="submit" disabled={!typedMemberCode.trim()}>
                   Use Typed Code
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setManualOpen(false)}>
                   Close
                 </Button>
               </div>
-            </div>
+            </form>
           </DialogContent>
         </Dialog>
 
@@ -1290,7 +1299,7 @@ export function MemberQrScanner({
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {availableCameras.length} camera(s) detected. Look for "Back" or "Rear" camera for QR scanning.
+                    {availableCameras.length} camera(s) detected. Look for &quot;Back&quot; or &quot;Rear&quot; camera for QR scanning.
                   </p>
                 </div>
               ) : null}

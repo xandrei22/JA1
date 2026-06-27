@@ -21,6 +21,12 @@ import {
   listLocalAttendanceLogs,
   listLocalMemberAttendanceLogs,
 } from "@/lib/server/local-attendance-logs"
+import {
+  findLocalCredentialByBackupCode,
+  findLocalCredentialByQrToken,
+  addLocalMemberCredential,
+  listLocalMemberCredentials,
+} from "@/lib/server/local-member-credentials"
 
 export type MemberCredential = {
   memberId: string
@@ -38,6 +44,8 @@ export type AttendanceLogInput = {
   method: AttendanceMethod
   sourceCode: string
   loggedByUserId: string
+  loggedByUserName?: string | null
+  loggedByUserEmail?: string | null
   loggedAt?: string
 }
 
@@ -48,6 +56,8 @@ export type AttendanceLogRecord = {
   method: AttendanceMethod
   sourceCode: string
   loggedByUserId: string
+  loggedByUserName?: string | null
+  loggedByUserEmail?: string | null
   loggedAt: string
 }
 
@@ -59,6 +69,8 @@ export type AttendanceSessionInput = {
   eventStartTime: string
   eventEndTime: string
   createdByUserId: string
+  createdByUserName?: string | null
+  createdByUserEmail?: string | null
 }
 
 export type AttendanceSessionResult = {
@@ -73,6 +85,9 @@ export type AttendanceSessionResult = {
   qrPayload: string
   generatedAt: string
   persisted: boolean
+  createdByUserId?: string
+  createdByUserName?: string | null
+  createdByUserEmail?: string | null
   note?: string
 }
 
@@ -92,6 +107,10 @@ type SupabaseMemberCredentialRow = {
 
 const inMemoryAttendanceLogs: AttendanceLogRecord[] = []
 const inMemoryAttendanceSessions: AttendanceSessionResult[] = []
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim())
+}
 
 /**
  * Look up an event ID by event code.
@@ -166,7 +185,27 @@ export async function issueMemberCredential(
       throw err
     }
   } else {
-    console.warn("[issueMemberCredential] Supabase not configured, credential not persisted")
+    console.warn("[issueMemberCredential] Supabase not configured, credential not persisted to database")
+  }
+
+  // Always save to local storage as fallback
+  try {
+    await addLocalMemberCredential({
+      memberId,
+      branchCode,
+      qrToken,
+      qrPayload: credential.qrPayload,
+      backupCode,
+      generatedAt,
+      is_active: true,
+    })
+    console.log("[issueMemberCredential] Saved to local storage:", {
+      memberId,
+      backupCode,
+    })
+  } catch (localErr) {
+    console.error("[issueMemberCredential] Failed to save to local storage:", localErr)
+    // Don't throw - the credential is still valid in memory
   }
 
   return credential
@@ -194,10 +233,14 @@ export async function logAttendance(input: AttendanceLogInput) {
     loggedAt,
   })
 
-  // Check for duplicate attendance for the same event
+  console.log("[logAttendance] Supabase configured:", isSupabaseConfigured())
+
+  // Check for duplicate attendance for the same event (both Supabase and local storage)
+  let duplicateFound = false
+  
   if (isSupabaseConfigured()) {
     try {
-      console.log("[logAttendance] Checking for duplicate attendance...")
+      console.log("[logAttendance] Checking for duplicate attendance in Supabase...")
       const existingRecords = await selectSupabaseRows<{
         id: string
         member_id: string
@@ -213,20 +256,38 @@ export async function logAttendance(input: AttendanceLogInput) {
       })
 
       if (existingRecords.length > 0) {
-        console.log("[logAttendance] Duplicate attendance found for member:", input.memberId, "event:", input.eventCode)
-        throw new Error(
-          `You have already logged attendance for event ${input.eventCode}. ` +
-          `You cannot submit attendance to the same event twice.`
-        )
+        console.log("[logAttendance] Duplicate attendance found in Supabase for member:", input.memberId, "event:", input.eventCode)
+        duplicateFound = true
       }
-      console.log("[logAttendance] No duplicate found, proceeding with attendance logging")
     } catch (err) {
-      if (err instanceof Error && err.message.includes("already logged attendance")) {
-        throw err // Re-throw duplicate attendance errors
-      }
-      console.warn("[logAttendance] Error checking duplicates (continuing anyway):", err)
+      console.warn("[logAttendance] Error checking duplicates in Supabase:", err)
     }
   }
+
+  // Also check local storage for duplicates
+  try {
+    console.log("[logAttendance] Checking for duplicate attendance in local storage...")
+    const localLogs = await listLocalAttendanceLogs(input.branchCode, 500)
+    const localDuplicate = localLogs.find(
+      (log) => log.memberId === input.memberId && log.eventCode === input.eventCode
+    )
+    
+    if (localDuplicate) {
+      console.log("[logAttendance] Duplicate attendance found in local storage for member:", input.memberId, "event:", input.eventCode)
+      duplicateFound = true
+    }
+  } catch (err) {
+    console.warn("[logAttendance] Error checking duplicates in local storage:", err)
+  }
+
+  if (duplicateFound) {
+    throw new Error(
+      `You have already logged attendance for event ${input.eventCode}. ` +
+      `You cannot submit attendance to the same event twice.`
+    )
+  }
+
+  console.log("[logAttendance] No duplicate found, proceeding with attendance logging")
 
   const logRecord = {
     memberId: input.memberId,
@@ -235,6 +296,8 @@ export async function logAttendance(input: AttendanceLogInput) {
     method: input.method as "qr" | "manual",
     sourceCode: input.sourceCode,
     loggedByUserId: input.loggedByUserId,
+    loggedByUserName: input.loggedByUserName ?? null,
+    loggedByUserEmail: input.loggedByUserEmail ?? null,
     loggedAt,
   }
 
@@ -244,25 +307,34 @@ export async function logAttendance(input: AttendanceLogInput) {
       
       // Critical: Look up the event_id to establish proper relationship
       const eventId = await lookupEventId(input.eventCode)
-      
-      if (!eventId) {
-        throw new Error(
-          `Event with code '${input.eventCode}' was not found in database. ` +
-          `The event may not have been created yet. Please create the event first.`
-        )
-      }
 
-      console.log("[logAttendance] Inserting to Supabase attendance_logs table with event_id:", eventId)
-      const inserted = await insertSupabaseRow("attendance_logs", {
+      const supabasePayload: Record<string, unknown> = {
         member_id: input.memberId,
-        event_id: eventId,  // CRITICAL: Now properly linked to events table
         event_code: input.eventCode,
         branch_code: input.branchCode,
         method: input.method,
         source_code: input.sourceCode,
-        logged_by_user_id: input.loggedByUserId,
         logged_at: loggedAt,
-      })
+        logged_by_user_key: input.loggedByUserId,
+        logged_by_user_name: input.loggedByUserName ?? null,
+        logged_by_user_email: input.loggedByUserEmail ?? null,
+      }
+
+      if (isUuid(input.loggedByUserId)) {
+        supabasePayload.logged_by_user_id = input.loggedByUserId
+      }
+
+      if (eventId) {
+        supabasePayload.event_id = eventId
+        console.log("[logAttendance] Inserting to Supabase attendance_logs table with event_id:", eventId)
+      } else {
+        console.warn(
+          `[logAttendance] Event code '${input.eventCode}' was not found. Inserting attendance without event_id so the record is still stored.`
+        )
+      }
+
+      console.log("[logAttendance] Supabase payload:", JSON.stringify(supabasePayload, null, 2))
+      const inserted = await insertSupabaseRow("attendance_logs", supabasePayload)
 
       console.log("[logAttendance] Successfully inserted to Supabase:", {
         insertedRecord: inserted,
@@ -285,7 +357,11 @@ export async function logAttendance(input: AttendanceLogInput) {
       }
     } catch (err) {
       // Fall back to local file and in-memory storage
-      console.error("[logAttendance] Supabase insert failed:", err)
+      console.error("[logAttendance] Supabase insert failed with error:", err)
+      console.error("[logAttendance] Error details:", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
     }
   }
 
@@ -452,7 +528,7 @@ export async function listMemberAttendanceLogs(input: { memberId: string; limit?
       }
 
       console.log("[listMemberAttendanceLogs] Querying Supabase attendance_logs with member_id filter:", memberIdToUse)
-      const rows = await selectSupabaseRows<{
+      const rowsByMemberId = await selectSupabaseRows<{
         member_id: string
         event_code: string
         branch_code: string
@@ -468,16 +544,43 @@ export async function listMemberAttendanceLogs(input: { memberId: string; limit?
         ascending: false,
       })
 
-      console.log("[listMemberAttendanceLogs] Found records:", rows.length)
-      if (rows.length === 0) {
-        console.log("[listMemberAttendanceLogs] No records found in Supabase for member_id:", memberIdToUse)
+      const rowsByLoggedByUserId = memberIdToUse === input.memberId
+        ? []
+        : await selectSupabaseRows<{
+            member_id: string
+            event_code: string
+            branch_code: string
+            method: AttendanceMethod
+            source_code: string
+            logged_by_user_id: string
+            logged_at: string
+          }>({
+            table: "attendance_logs",
+            filters: { logged_by_user_id: input.memberId },
+            limit,
+            orderBy: "logged_at",
+            ascending: false,
+          })
+
+      const combinedRows = [...rowsByMemberId, ...rowsByLoggedByUserId]
+      const seen = new Set<string>()
+      const dedupedRows = combinedRows.filter((row) => {
+        const key = `${row.logged_at}|${row.member_id}|${row.event_code}|${row.logged_by_user_id}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      console.log("[listMemberAttendanceLogs] Found records:", dedupedRows.length)
+      if (dedupedRows.length === 0) {
+        console.log("[listMemberAttendanceLogs] No records found in Supabase for member_id or logged_by_user_id:", memberIdToUse)
       } else {
-        console.log("[listMemberAttendanceLogs] First record:", rows[0])
+        console.log("[listMemberAttendanceLogs] First record:", dedupedRows[0])
       }
 
       return {
         persisted: true,
-        records: rows.map((row) => ({
+        records: dedupedRows.map((row) => ({
           memberId: row.member_id,
           eventCode: row.event_code,
           branchCode: row.branch_code,
@@ -571,7 +674,24 @@ export async function resolveMemberIdByCredentialCode(code: string): Promise<str
         return byToken[0].member_id
       }
 
-      // Try by backup code (case-insensitive)
+      // Try by backup code using direct filter first
+      const byBackupCodeDirect = await selectSupabaseRows<SupabaseMemberCredentialRow & { backup_code: string }>({
+        table: "member_credentials",
+        filters: {
+          backup_code: normalizedCode,
+          is_active: true,
+        },
+        limit: 1,
+        orderBy: "generated_at",
+        ascending: false,
+      })
+
+      if (byBackupCodeDirect[0]?.member_id) {
+        console.log("[resolveMemberIdByCredentialCode] Found by backup_code (direct filter):", byBackupCodeDirect[0].member_id)
+        return byBackupCodeDirect[0].member_id
+      }
+
+      // If direct filter didn't work, try fetching and filtering (case sensitivity fallback)
       const byBackupCode = await selectSupabaseRows<SupabaseMemberCredentialRow & { backup_code: string }>({
         table: "member_credentials",
         filters: {
@@ -588,32 +708,95 @@ export async function resolveMemberIdByCredentialCode(code: string): Promise<str
       )
 
       if (match?.member_id) {
-        console.log("[resolveMemberIdByCredentialCode] Found by backup_code:", match.member_id)
+        console.log("[resolveMemberIdByCredentialCode] Found by backup_code (fallback):", match.member_id)
         return match.member_id
       }
 
-      console.log("[resolveMemberIdByCredentialCode] Code not found in credentials table")
+      console.log("[resolveMemberIdByCredentialCode] Code not found in Supabase credentials table")
     } catch (err) {
       console.error("[resolveMemberIdByCredentialCode] Supabase lookup error:", err)
     }
   }
 
+  // Fallback to local storage
+  try {
+    console.log("[resolveMemberIdByCredentialCode] Checking local storage for code:", normalizedCode)
+    
+    // Try by QR token in local storage
+    const localByToken = await findLocalCredentialByQrToken(normalizedCode)
+    if (localByToken?.memberId) {
+      console.log("[resolveMemberIdByCredentialCode] Found by qr_token in local storage:", localByToken.memberId)
+      return localByToken.memberId
+    }
+
+    // Try by backup code in local storage
+    const localByBackup = await findLocalCredentialByBackupCode(normalizedCode)
+    if (localByBackup?.memberId) {
+      console.log("[resolveMemberIdByCredentialCode] Found by backup_code in local storage:", localByBackup.memberId)
+      return localByBackup.memberId
+    }
+
+    // Try fuzzy matching for common typos (I vs 1, O vs 0, etc.)
+    const localCredentials = await listLocalMemberCredentials(100)
+    const fuzzyMatch = localCredentials.find(
+      (cred) => {
+        if (!cred.backupCode) return false
+        const normalizedBackup = cred.backupCode.trim().toUpperCase()
+        // Replace common lookalike characters
+        const normalizedInput = normalizedCode
+          .replace(/I/g, '1')
+          .replace(/O/g, '0')
+          .replace(/S/g, '5')
+          .replace(/Z/g, '2')
+        const normalizedBackupFixed = normalizedBackup
+          .replace(/I/g, '1')
+          .replace(/O/g, '0')
+          .replace(/S/g, '5')
+          .replace(/Z/g, '2')
+        return normalizedInput === normalizedBackupFixed
+      }
+    )
+
+    if (fuzzyMatch?.memberId) {
+      console.log("[resolveMemberIdByCredentialCode] Found via fuzzy match in local storage:", fuzzyMatch.memberId)
+      return fuzzyMatch.memberId
+    }
+
+    console.log("[resolveMemberIdByCredentialCode] Code not found in local storage")
+  } catch (localErr) {
+    console.error("[resolveMemberIdByCredentialCode] Local storage lookup error:", localErr)
+  }
+
+  // Try parsing as JSON QR payload
   try {
     const parsed = JSON.parse(normalizedCode) as { memberId?: string }
     if (typeof parsed.memberId === "string" && parsed.memberId.trim()) {
+      console.log("[resolveMemberIdByCredentialCode] Found memberId in JSON payload:", parsed.memberId)
       return parsed.memberId.trim()
     }
   } catch {
     // noop
   }
 
+  console.log("[resolveMemberIdByCredentialCode] Code not found anywhere:", normalizedCode)
   return null
 }
 
 export async function checkDuplicateAttendance(
   memberId: string,
   eventCode: string
-): Promise<{ isDuplicate: boolean; existingRecord?: any }> {
+): Promise<{
+  isDuplicate: boolean
+  existingRecord?: {
+    id?: string
+    memberId?: string
+    member_id?: string
+    eventCode?: string
+    event_code?: string
+    loggedAt?: string
+    logged_at?: string
+  }
+}> {
   if (!memberId || !eventCode) {
     return { isDuplicate: false }
   }
@@ -678,23 +861,83 @@ export async function resolveEventCodeBySessionBackupCode(code: string): Promise
   // Check local attendance sessions first
   try {
     const sessions = await listLocalAttendanceSessions("", 1000)
+    console.log("[resolveEventCodeBySessionBackupCode] Loaded", sessions.length, "local sessions")
+    console.log("[resolveEventCodeBySessionBackupCode] Sample backup codes:", sessions.slice(0, 5).map(s => s.backupCode))
+    console.log("[resolveEventCodeBySessionBackupCode] Looking for exact match:", normalizedCode)
+    
     const match = sessions.find(
       (session) => session.backupCode && session.backupCode.trim().toUpperCase() === normalizedCode
     )
 
     if (match?.eventCode) {
-      console.log("[resolveEventCodeBySessionBackupCode] Found session:", match.eventCode)
+      console.log("[resolveEventCodeBySessionBackupCode] Found session:", match.eventCode, "with backupCode:", match.backupCode)
       return match.eventCode
     }
+    
+    console.log("[resolveEventCodeBySessionBackupCode] No exact match found in local sessions for:", normalizedCode)
   } catch (err) {
     console.warn("[resolveEventCodeBySessionBackupCode] Local lookup failed:", err)
+  }
+
+  // Also try fuzzy matching for common typos (I vs 1, O vs 0, etc.)
+  try {
+    const sessions = await listLocalAttendanceSessions("", 1000)
+    const fuzzyMatch = sessions.find(
+      (session) => {
+        if (!session.backupCode) return false
+        const normalizedBackup = session.backupCode.trim().toUpperCase()
+        // Replace common lookalike characters
+        const normalizedInput = normalizedCode
+          .replace(/I/g, '1')
+          .replace(/O/g, '0')
+          .replace(/S/g, '5')
+          .replace(/Z/g, '2')
+        const normalizedBackupFixed = normalizedBackup
+          .replace(/I/g, '1')
+          .replace(/O/g, '0')
+          .replace(/S/g, '5')
+          .replace(/Z/g, '2')
+        return normalizedInput === normalizedBackupFixed
+      }
+    )
+
+    if (fuzzyMatch?.eventCode) {
+      console.log("[resolveEventCodeBySessionBackupCode] Found session via fuzzy match:", fuzzyMatch.eventCode, "(corrected from", normalizedCode, ")")
+      return fuzzyMatch.eventCode
+    }
+  } catch (err) {
+    console.warn("[resolveEventCodeBySessionBackupCode] Fuzzy matching failed:", err)
   }
 
   // Check Supabase events table if configured
   if (isSupabaseConfigured()) {
     try {
-      // Look for events by backup code in the events table
+      // Look for events by backup code in the events table using direct filter
       const events = await selectSupabaseRows<{
+        id: string
+        event_code: string
+        backup_code: string | null
+      }>({
+        table: "events",
+        filters: {
+          backup_code: normalizedCode,
+        },
+        limit: 1,
+      })
+
+      console.log("[resolveEventCodeBySessionBackupCode] Fetched events from Supabase with backup_code filter:", {
+        normalizedCode,
+        foundCount: events.length,
+      })
+
+      if (events.length > 0 && events[0]?.event_code) {
+        console.log("[resolveEventCodeBySessionBackupCode] Found in Supabase events table:", events[0].event_code)
+        return events[0].event_code
+      }
+
+      // If direct filter didn't work (case sensitivity or column issues), try fetching and filtering
+      console.log("[resolveEventCodeBySessionBackupCode] Direct filter failed, trying fallback method")
+      const allEvents = await selectSupabaseRows<{
         id: string
         event_code: string
         backup_code: string | null
@@ -703,18 +946,12 @@ export async function resolveEventCodeBySessionBackupCode(code: string): Promise
         limit: 100,
       })
 
-      console.log("[resolveEventCodeBySessionBackupCode] Fetched events from Supabase:", {
-        totalEvents: events.length,
-        eventsWithBackupCodes: events.filter(e => e.backup_code).length,
-        sampleBackupCodes: events.slice(0, 3).map(e => ({ event_code: e.event_code, backup_code: e.backup_code }))
-      })
-
-      const match = events.find(
+      const match = allEvents.find(
         (event) => event.backup_code && event.backup_code.trim().toUpperCase() === normalizedCode
       )
 
       if (match?.event_code) {
-        console.log("[resolveEventCodeBySessionBackupCode] Found in Supabase events table:", match.event_code)
+        console.log("[resolveEventCodeBySessionBackupCode] Found in Supabase events table via fallback:", match.event_code)
         return match.event_code
       }
 
@@ -747,6 +984,14 @@ export async function createAttendanceSession(
     equivalentCode: backupCode,
   })
 
+  // Validate that createdByUserId is a valid UUID before attempting database insert
+  const createdByUserId = isUuid(input.createdByUserId) ? input.createdByUserId : null
+  
+  if (!createdByUserId) {
+    console.warn("[createAttendanceSession] createdByUserId is not a valid UUID:", input.createdByUserId)
+    console.warn("[createAttendanceSession] Event will be created without created_by (nullable)")
+  }
+
   if (isSupabaseConfigured()) {
     try {
       console.log("[createAttendanceSession] Looking up branch with code:", input.branchCode)
@@ -767,6 +1012,17 @@ export async function createAttendanceSession(
           branch_id: branch.id,
           event_code: eventCode,
           backup_code: backupCode,
+          created_by: createdByUserId,
+        })
+        
+        console.log("Payload:", {
+          event_code: eventCode,
+          title: input.eventName,
+          branch_id: branch.id,
+          starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
+          ends_at: `${input.eventDate}T${input.eventEndTime}:00Z`,
+          backup_code: backupCode,
+          created_by: createdByUserId,
         })
         
         insertResult = await insertSupabaseRow("events", {
@@ -776,7 +1032,7 @@ export async function createAttendanceSession(
           starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
           ends_at: `${input.eventDate}T${input.eventEndTime}:00Z`,
           backup_code: backupCode,
-          created_by: input.createdByUserId,
+          created_by: createdByUserId,
         })
         
         console.log("[createAttendanceSession] Event insert with branch succeeded:", insertResult)
@@ -792,7 +1048,7 @@ export async function createAttendanceSession(
             starts_at: `${input.eventDate}T${input.eventStartTime}:00Z`,
             ends_at: `${input.eventDate}T${input.eventEndTime}:00Z`,
             backup_code: backupCode,
-            created_by: input.createdByUserId,
+            created_by: createdByUserId,
           })
           
           console.log("[createAttendanceSession] Event insert without branch succeeded:", insertResult)
@@ -819,6 +1075,9 @@ export async function createAttendanceSession(
         qrPayload,
         generatedAt,
         persisted: true,
+        createdByUserId: input.createdByUserId,
+        createdByUserName: input.createdByUserName ?? null,
+        createdByUserEmail: input.createdByUserEmail ?? null,
       }
 
       console.log("[createAttendanceSession] Event successfully created and persisted:", {
@@ -843,6 +1102,9 @@ export async function createAttendanceSession(
         qrPayload,
         generatedAt,
         persisted: false,
+        createdByUserId: input.createdByUserId,
+        createdByUserName: input.createdByUserName ?? null,
+        createdByUserEmail: input.createdByUserEmail ?? null,
         note: `Event creation failed: ${err instanceof Error ? err.message : String(err)}. Session code was still generated.`,
       }
       inMemoryAttendanceSessions.push(result)
@@ -863,6 +1125,9 @@ export async function createAttendanceSession(
     qrPayload,
     generatedAt,
     persisted: false,
+    createdByUserId: input.createdByUserId,
+    createdByUserName: input.createdByUserName ?? null,
+    createdByUserEmail: input.createdByUserEmail ?? null,
   }
 
   inMemoryAttendanceSessions.push(session)
@@ -873,6 +1138,55 @@ export async function createAttendanceSession(
 
 export async function listAttendanceSessions(input: { branchCode: string; limit?: number }) {
   const limit = Math.max(1, Math.min(input.limit ?? 50, 200))
+  if (isSupabaseConfigured()) {
+    try {
+      const branch = await selectSupabaseSingle<SupabaseBranchRow>("branches", {
+        branch_code: input.branchCode,
+      })
+
+      if (branch?.id) {
+        const rows = await selectSupabaseRows<{
+          event_code: string
+          title: string
+          starts_at: string
+          ends_at: string | null
+          backup_code: string | null
+          created_by_user_id: string | null
+          created_by_user_name: string | null
+          created_by_user_email: string | null
+        }>({
+          table: "events",
+          filters: { branch_id: branch.id },
+          limit,
+          orderBy: "starts_at",
+          ascending: false,
+        })
+
+        if (rows.length > 0) {
+          return rows.map((row) => ({
+            branchCode: input.branchCode,
+            eventCode: row.event_code,
+            eventName: row.title,
+            eventPlace: input.branchCode,
+            eventDate: (row.starts_at ?? "").split("T")[0] ?? "",
+            eventStartTime: ((row.starts_at ?? "").split("T")[1] ?? "").replace("Z", "").slice(0, 5),
+            eventEndTime: ((row.ends_at ?? "").split("T")[1] ?? "").replace("Z", "").slice(0, 5),
+            backupCode: row.backup_code ?? "",
+            qrPayload: "",
+            generatedAt: row.starts_at ?? new Date().toISOString(),
+            persisted: true,
+            createdByUserId: row.created_by_user_id ?? undefined,
+            createdByUserName: row.created_by_user_name ?? null,
+            createdByUserEmail: row.created_by_user_email ?? null,
+          }))
+        }
+      }
+    } catch (err) {
+      console.warn("[listAttendanceSessions] Supabase session lookup failed:", err)
+      // fall through to local storage
+    }
+  }
+
   const localSessions = await listLocalAttendanceSessions(input.branchCode, limit)
   if (localSessions.length > 0) {
     return localSessions
@@ -899,6 +1213,9 @@ export async function getLatestAttendanceSession(branchCode: string): Promise<At
           title: string
           starts_at: string
           backup_code: string | null
+          created_by_user_id: string | null
+          created_by_user_name: string | null
+          created_by_user_email: string | null
         }>({
           table: "events",
           filters: { branch_id: branch.id },
@@ -914,6 +1231,17 @@ export async function getLatestAttendanceSession(branchCode: string): Promise<At
         const [datePart, timePart] = (ev.starts_at ?? "").split("T")
         const time = (timePart ?? "").replace("Z", "").slice(0, 5)
 
+        const qrPayload = buildSessionQrPayload({
+          branchCode,
+          eventCode: ev.event_code,
+          eventName: ev.title,
+          eventPlace: branchCode,
+          eventDate: datePart ?? "",
+          eventStartTime: time ?? "",
+          eventEndTime: "",
+          equivalentCode: ev.backup_code ?? "",
+        })
+
         return {
           branchCode,
           eventCode: ev.event_code,
@@ -923,9 +1251,12 @@ export async function getLatestAttendanceSession(branchCode: string): Promise<At
           eventStartTime: time ?? "",
           eventEndTime: "",
           backupCode: ev.backup_code ?? "",
-          qrPayload: "",
+          qrPayload,
           generatedAt: new Date().toISOString(),
           persisted: true,
+          createdByUserId: ev.created_by_user_id ?? undefined,
+          createdByUserName: ev.created_by_user_name ?? null,
+          createdByUserEmail: ev.created_by_user_email ?? null,
         }
       }
     } catch (err) {

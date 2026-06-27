@@ -16,6 +16,18 @@ export async function GET(request: Request) {
 
   if (isSupabaseConfigured()) {
     try {
+      // First try to get branch_id for the given branchCode
+      const branch = await selectSupabaseRows<{ id: string }>({
+        table: "branches",
+        filters: { branch_code: branchCode },
+        limit: 1,
+      })
+
+      const filters: Record<string, string | number> = {}
+      if (branch.length > 0) {
+        filters.branch_id = branch[0].id
+      }
+
       const rows = await selectSupabaseRows<{
         event_code: string
         title: string
@@ -23,6 +35,7 @@ export async function GET(request: Request) {
         backup_code: string | null
       }>({
         table: "events",
+        filters: Object.keys(filters).length > 0 ? filters : undefined,
         limit,
         orderBy: "starts_at",
         ascending: false,

@@ -112,6 +112,9 @@ create table if not exists public.attendance_logs (
   branch_code text not null,
   method public.attendance_method not null,
   source_code text not null,
+  logged_by_user_key text,
+  logged_by_user_name text,
+  logged_by_user_email text,
   logged_by_user_id uuid references public.profiles(id),
   logged_at timestamptz not null default now(),
   created_at timestamptz not null default now()

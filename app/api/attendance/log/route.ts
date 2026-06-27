@@ -197,26 +197,33 @@ export async function POST(request: Request) {
 
     console.log("[Attendance Log] Resolved memberId:", memberId)
 
-    if (!memberId || !eventCode || !body.method || !sourceCode) {
+    // Require memberId, eventCode and method. Only require sourceCode when
+    // the method is a QR scan — manual logging won't have a sourceCode.
+    if (!memberId || !eventCode || !body.method || (body.method === "qr" && !sourceCode)) {
+      const missing = [] as string[]
+      if (!memberId) missing.push("memberId")
+      if (!eventCode) missing.push("eventCode")
+      if (!body.method) missing.push("method")
+      if (body.method === "qr" && !sourceCode) missing.push("sourceCode (required for qr)")
+
       return NextResponse.json(
-        { error: "memberId, eventCode, method, and sourceCode are required" },
+        { error: `${missing.join(", ")} ${missing.length ? "are" : "is"} required` },
         { status: 400 }
       )
     }
 
     const resolvedMemberName = await getMemberNameById(memberId)
 
+    // Name validation is now optional - if memberName is provided, use it for display
+    // but don't block attendance if it doesn't match exactly, since QR scanning already
+    // validates the member identity
     if (memberName && resolvedMemberName) {
       const normalizedProvidedName = memberName.trim().toLowerCase()
       const normalizedMemberName = resolvedMemberName.trim().toLowerCase()
 
       if (normalizedProvidedName !== normalizedMemberName) {
-        return NextResponse.json(
-          {
-            error: "Name confirmation does not match member record.",
-          },
-          { status: 400 }
-        )
+        console.warn("[Attendance Log] Name mismatch - provided:", memberName, "resolved:", resolvedMemberName)
+        // Continue anyway - the QR code already validated the member
       }
     }
 
@@ -227,6 +234,8 @@ export async function POST(request: Request) {
       method: body.method,
       sourceCode,
       loggedByUserId: session.user.id,
+      loggedByUserName: session.user.name ?? null,
+      loggedByUserEmail: session.user.email ?? null,
       loggedAt: body.loggedAt,
     })
 

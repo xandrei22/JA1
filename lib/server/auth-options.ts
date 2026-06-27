@@ -37,7 +37,7 @@ function loadSeedUsers(): SeedUser[] {
   if (!raw) {
     return [
       {
-        id: "seed-vip-chairman",
+        id: "00000000-0000-0000-0000-000000000001",
         email: "vip@ja1.local",
         password: "ChangeMe123!",
         name: "VIP Chairman",
@@ -46,7 +46,7 @@ function loadSeedUsers(): SeedUser[] {
         ageGroup: null,
       },
       {
-        id: "seed-pastor",
+        id: "00000000-0000-0000-0000-000000000002",
         email: "pastor@ja1.local",
         password: "ChangeMe123!",
         name: "Supervising Pastor",
@@ -55,7 +55,7 @@ function loadSeedUsers(): SeedUser[] {
         ageGroup: null,
       },
       {
-        id: "seed-chairman",
+        id: "00000000-0000-0000-0000-000000000003",
         email: "chairman@ja1.local",
         password: "ChangeMe123!",
         name: "Age Group Chairman",
@@ -64,7 +64,7 @@ function loadSeedUsers(): SeedUser[] {
         ageGroup: "AY",
       },
       {
-        id: "seed-leader",
+        id: "00000000-0000-0000-0000-000000000004",
         email: "leader@ja1.local",
         password: "ChangeMe123!",
         name: "Age Group Leader",
@@ -140,7 +140,7 @@ const providers: NextAuthOptions["providers"] = [
 
           if (dbUser && verifyPassword(credentials.password, dbUser.password_hash)) {
             return {
-              id: dbUser.id,
+              id: dbUser.id, // Use the UUID from central_users
               email: dbUser.email,
               name: dbUser.full_name ?? dbUser.email,
               role: resolveSafeRole(dbUser.role ?? undefined, dbUser.email),
@@ -199,6 +199,7 @@ export const authOptions: NextAuthOptions = {
   providers,
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   session: {
     strategy: "jwt",
@@ -234,13 +235,17 @@ export const authOptions: NextAuthOptions = {
                 is_active: true,
               })
 
-              console.log("[Auth] Auto-created user in central_users:", { email, defaultBranchCode })
+              console.log("[Auth] Auto-created user in central_users:", { email, defaultBranchCode, newUserId })
               
               branchCode = defaultBranchCode
+              // Use the UUID from central_users as the user ID
+              token.sub = newUserId
             } else {
-              // User exists - use their stored branch_code
+              // User exists - use their stored branch_code and UUID
               branchCode = existingUser.branch_code
               role = existingUser.role ?? role
+              // Use the UUID from central_users as the user ID
+              token.sub = existingUser.id
             }
           } catch (err) {
             console.warn("[Auth] Failed to auto-create/retrieve user from central_users:", err)
